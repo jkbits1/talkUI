@@ -5,7 +5,7 @@
 "use strict";
 
 // wrap in IIFE, just to be tidy
-(() => {
+(function () {
   const Path = require('path');
   const Hapi = require('hapi');
   const Inert = require('inert');
