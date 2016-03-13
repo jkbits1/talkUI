@@ -42,7 +42,7 @@
   });
   server.connection({port: port});
 
-  server.register(Inert, () => {
+  server.register(Inert, function () {
   });
 
   server.route({
@@ -73,7 +73,7 @@
     }
   });
 
-  server.start((err) => {
+  server.start(function (err) {
 
     if (err) {
       throw err;
