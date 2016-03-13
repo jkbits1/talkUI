@@ -5,7 +5,7 @@
 "use strict";
 
 // wrap in IIFE, just to be tidy
-(function () {
+(() => {
   const Path = require('path');
   const Hapi = require('hapi');
   const Inert = require('inert');
@@ -42,7 +42,7 @@
   });
   server.connection({port: port});
 
-  server.register(Inert, function () {
+  server.register(Inert, () => {
   });
 
   server.route({
@@ -73,7 +73,7 @@
     }
   });
 
-  server.start(function (err) {
+  server.start((err) => {
 
     if (err) {
       throw err;
