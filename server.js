@@ -2,6 +2,7 @@
  * Created by Jon on 12/03/16.
  */
 
+"use strict";
 
 // wrap in IIFE, just to be tidy
 (() => {
