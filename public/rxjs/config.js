@@ -8,7 +8,7 @@ System.config({
     emitDecoratorMetadata: true
   },
   map: {
-    app: "rxjs/src",
+    app: "src",
     'rx.all': 'https://cdnjs.cloudflare.com/ajax/libs/rxjs/3.1.1/rx.all.js'
   },
   packages: {

@@ -14,36 +14,93 @@ enum WheelNums { First, Second, Third, Answers };
     selector: 'my-app',
     //providers: [JSONP_PROVIDERS],
     template: `
-<div>
-<input #wheel1 type="text" (keyup)="keyup1($event)">
-<input #wheel2 type="text" (keyup)="keyup2($event)">
-<input #wheel3 type="text" (keyup)="keyup3($event)">
-<input #wheel4 type="text" (keyup)="keyup4($event)">
-<button (click)="testclick($event)">test</button>
-<ul>
-  <!--<li *ng-for="#result of results1">{{result.val}}&nbsp;{{result.id}}</li>-->
-  <!--<li *ng-for="#result of results2">{{result.val}}&nbsp;{{result.id}}</li>-->
-</ul>
-<pre>{{ wheel1.value }}</pre>
-<br>Wheel 1
-1 - {{wheels[0].toString()}}
-<br>Wheel 2
-2- {{wheels[1].toString()}}
-<br>Wheel 3
-3- {{wheels[2].toString()}}
-<br>Wheel 4
-4- {{wheels[3].toString()}}
-<br>Loop 2
-4- {{secLoop}}
-<br>Loop 3
-4- {{thrLoop}}
-<br>Loop ans
-4- {{ansLoop}}
-<br>Perms 2
-4- {{perms2}}
-<br>Perms 3
-4- {{perms3}}
+<br>
+<div class="container">
+  <div class="row">
+    <input #wheel1 type="text" (keyup)="keyup1($event)">
+    <input #wheel2 type="text" (keyup)="keyup2($event)">
+    <input #wheel3 type="text" (keyup)="keyup3($event)">
+    <input #wheel4 type="text" (keyup)="keyup4($event)">
+    <button (click)="testclick($event)">test</button>
+  </div>
+  <div class="row">
+    <ul>
+      <!--<li *ng-for="#result of results1">{{result.val}}&nbsp;{{result.id}}</li>-->
+      <!--<li *ng-for="#result of results2">{{result.val}}&nbsp;{{result.id}}</li>-->
+    </ul>
+    <pre>{{ wheel1.value }}</pre>
+  </div>
+  <div class="row">
+    <div class="col-sm-2">
+      Wheel 1
+    </div>
+    <div class="col-sm-2">
+      {{wheels[0].toString()}}
+    </div>
+  </div>
+<br>
+  <div class="row">
+    <div class="col-sm-2">
+      Wheel 2
+    </div>
+    <div class="col-sm-2">
+      {{wheels[1].toString()}}
+    </div>
+    <div class="col-sm-2">
+      Loop 2
+    </div>
+    <div class="col-sm-2">
+      {{secLoop}}
+    </div>
+  </div>
+<br>
+  <div class="row">
+    <div class="col-sm-2">
+      Wheel 3
+    </div>
+    <div class="col-sm-2">
+      {{wheels[2].toString()}}
+    </div>
+    <div class="col-sm-2">
+      Loop 3
+    </div>
+    <div class="col-sm-2">
+      {{thrLoop}}
+    </div>
+  </div>
+<br>
+  <div class="row">
+    <div class="col-sm-2">
+      Wheel 4
+    </div>
+    <div class="col-sm-2">
+      {{wheels[3].toString()}}
+    </div>
+    <div class="col-sm-2">
+      Loop ans
+    </div>
+    <div class="col-sm-2">
+      {{ansLoop}}
+    </div>
+  </div>
 
+  <div class="row">
+    <div class="col-sm-2">
+      Perms 2
+    </div>
+    <div class="col-sm-8">
+      {{perms2}}
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-sm-2">
+      Perms 3
+    </div>
+    <div class="col-sm-8">
+      {{perms3}}
+    </div>
+  </div>
+<br>
 
 </div>
 `,
