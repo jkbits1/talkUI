@@ -5,9 +5,6 @@
 "use strict";
 
 export module WheelCalcs {
-//  interface CalcsIf {
-//    t (s: string): string
-//  }
 
   declare module _ {
     interface RIf {
