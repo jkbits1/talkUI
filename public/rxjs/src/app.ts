@@ -17,66 +17,61 @@ enum WheelNums { First, Second, Third, Answers };
 <br>
 <div class="container">
   <div class="row">
-    <input #wheel1 type="text" (keyup)="keyup1($event)">
-    <input #wheel2 type="text" (keyup)="keyup2($event)">
-    <input #wheel3 type="text" (keyup)="keyup3($event)">
-    <input #wheel4 type="text" (keyup)="keyup4($event)">
+    <input #wheel1 type="text" (keyup)="keyup1($event)" value="1,2,3">
+    <input #wheel2 type="text" (keyup)="keyup2($event)" value="4,5,6">
+    <input #wheel3 type="text" (keyup)="keyup3($event)" value="7,8,9">
+    <input #wheel4 type="text" (keyup)="keyup4($event)" value="12,15,18">
     <button (click)="testclick($event)">test</button>
   </div>
+
+  <br>
   <div class="row">
-    <ul>
-      <!--<li *ng-for="#result of results1">{{result.val}}&nbsp;{{result.id}}</li>-->
-      <!--<li *ng-for="#result of results2">{{result.val}}&nbsp;{{result.id}}</li>-->
-    </ul>
-    <pre>{{ wheel1.value }}</pre>
-  </div>
-  <div class="row">
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Wheel 1
     </div>
     <div class="col-sm-2">
       {{wheels[0].toString()}}
     </div>
   </div>
-<br>
+  <br>
   <div class="row">
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Wheel 2
     </div>
     <div class="col-sm-2">
       {{wheels[1].toString()}}
     </div>
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Loop 2
     </div>
     <div class="col-sm-2">
       {{secLoop}}
     </div>
   </div>
-<br>
+  <br>
   <div class="row">
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Wheel 3
     </div>
     <div class="col-sm-2">
       {{wheels[2].toString()}}
     </div>
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Loop 3
     </div>
     <div class="col-sm-2">
       {{thrLoop}}
     </div>
   </div>
-<br>
+  <br>
   <div class="row">
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Wheel 4
     </div>
     <div class="col-sm-2">
       {{wheels[3].toString()}}
     </div>
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Loop ans
     </div>
     <div class="col-sm-2">
@@ -84,19 +79,22 @@ enum WheelNums { First, Second, Third, Answers };
     </div>
   </div>
 
+  <br>
   <div class="row">
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Perms 2
     </div>
     <div class="col-sm-8">
       {{perms2}}
     </div>
   </div>
+
+  <br>
   <div class="row">
-    <div class="col-sm-2">
+    <div class="col-sm-2 itemLabel">
       Perms 3
     </div>
-    <div class="col-sm-8">
+    <div class="col-sm-6">
       {{perms3}}
     </div>
   </div>
