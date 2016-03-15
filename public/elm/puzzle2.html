@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html><head><meta charset="UTF-8"><link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"><title>Elm Calculations</title><style>html,head,body { padding:0; margin:0; }
+<html><head><meta charset="UTF-8"><link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"><title>Main</title><style>html,head,body { padding:0; margin:0; }
 body { font-family: calibri, helvetica, arial, sans-serif; }</style><script type="text/javascript">var Elm = Elm || { Native: {} };Elm.Array = Elm.Array || {};
 Elm.Array.make = function (_elm) {
    "use strict";
@@ -4332,7 +4332,7 @@ Elm.Main.make = function (_elm) {
                                  ,_0: "display"
                                  ,_1: "block"}]);}
          _U.badCase($moduleName,
-         "between lines 254 and 256");
+         "between lines 253 and 255");
       }();
    };
    var infoRow = F3(function (label,
@@ -4525,21 +4525,9 @@ Elm.Main.make = function (_elm) {
                    action)]),
       _L.fromArray([$Html.text(label)]));
    });
-   var answersButton = A2(uiButton,
-   ShowAns,
-   "Show Answers");
    var backButton = A2(uiButton,
    Back,
    "Step Back");
-   var stateButton = A2(uiButton,
-   ShowState,
-   "Show State");
-   var perms2Button = A2(uiButton,
-   ShowPerms2,
-   "Show Perms 2");
-   var perms3Button = A2(uiButton,
-   ShowPerms3,
-   "Show Perms 3");
    var showLoopButton = F3(function (labels,
    hide,
    action) {
@@ -4554,6 +4542,38 @@ Elm.Main.make = function (_elm) {
          _L.fromArray([$Html.text(label)]));
       }();
    });
+   var answersButton = function (hide) {
+      return A3(showLoopButton,
+      {ctor: "_Tuple2"
+      ,_0: "Show Answers"
+      ,_1: "Hide Answers"},
+      hide,
+      ShowAns);
+   };
+   var stateButton = function (hide) {
+      return A3(showLoopButton,
+      {ctor: "_Tuple2"
+      ,_0: "Show State"
+      ,_1: "Hide State"},
+      hide,
+      ShowState);
+   };
+   var perms2Button = function (hide) {
+      return A3(showLoopButton,
+      {ctor: "_Tuple2"
+      ,_0: "Show Perms 2"
+      ,_1: "Hide Perms 2"},
+      hide,
+      ShowPerms2);
+   };
+   var perms3Button = function (hide) {
+      return A3(showLoopButton,
+      {ctor: "_Tuple2"
+      ,_0: "Show Perms 3"
+      ,_1: "Hide Perms 3"},
+      hide,
+      ShowPerms3);
+   };
    var wheelRow = F7(function (idx,
    wheelLabel,
    loopLabel,
@@ -4705,7 +4725,7 @@ Elm.Main.make = function (_elm) {
                                            ,_3: newCalcs};
                                  }();}
                             _U.badCase($moduleName,
-                            "between lines 456 and 476");
+                            "between lines 461 and 481");
                          }();
                       });
                       var $ = A2($Maybe.withDefault,
@@ -4834,12 +4854,12 @@ Elm.Main.make = function (_elm) {
                               A2(buttonListToggle,_v3._2,7),
                               true);}
                          _U.badCase($moduleName,
-                         "between lines 478 and 500");
+                         "between lines 483 and 505");
                       }();
                    }();}
               break;}
          _U.badCase($moduleName,
-         "between lines 449 and 500");
+         "between lines 454 and 505");
       }();
    });
    var updateModelLift = A3($Signal.foldp,
@@ -4870,16 +4890,24 @@ Elm.Main.make = function (_elm) {
                                                        _L.fromArray([$Html$Attributes.$class("row")]),
                                                        _L.fromArray([A2($Html.div,
                                                                     _L.fromArray([$Html$Attributes.$class("btn-group")]),
-                                                                    _L.fromArray([perms2Button
-                                                                                 ,perms3Button
-                                                                                 ,answersButton]))
+                                                                    _L.fromArray([perms2Button(A2(buttonVal,
+                                                                                 _v26._2,
+                                                                                 5))
+                                                                                 ,perms3Button(A2(buttonVal,
+                                                                                 _v26._2,
+                                                                                 6))
+                                                                                 ,answersButton(A2(buttonVal,
+                                                                                 _v26._2,
+                                                                                 1))]))
                                                                     ,A2($Html.div,
                                                                     _L.fromArray([$Html$Attributes.$class("btn-group")
                                                                                  ,$Html$Attributes.style(_L.fromArray([{ctor: "_Tuple2"
                                                                                                                        ,_0: "margin-left"
                                                                                                                        ,_1: "5px"}]))]),
                                                                     _L.fromArray([backButton
-                                                                                 ,stateButton]))]))
+                                                                                 ,stateButton(A2(buttonVal,
+                                                                                 _v26._2,
+                                                                                 7))]))]))
                                                        ,A2($Html.br,
                                                        _L.fromArray([]),
                                                        _L.fromArray([]))
@@ -4952,7 +4980,20 @@ Elm.Main.make = function (_elm) {
                                           _L.fromArray([]))
                                           ,A2($Html.div,
                                           _L.fromArray([$Html$Attributes.$class("container")]),
-                                          _L.fromArray([A2(infoRow,
+                                          _L.fromArray([A2($Html.div,
+                                                       _L.fromArray([$Html$Attributes.$class("row")
+                                                                    ,$Html$Attributes.style(displayStyle(A2(buttonVal,
+                                                                    _v26._2,
+                                                                    1)))]),
+                                                       _L.fromArray([A2($Html.div,
+                                                       _L.fromArray([$Html$Attributes.$class("col-sm-12")]),
+                                                       _L.fromArray([foundAnswerIndicator(_v26._3._6._1)(A2(buttonVal,
+                                                       _v26._2,
+                                                       1))]))]))
+                                                       ,A2($Html.br,
+                                                       _L.fromArray([]),
+                                                       _L.fromArray([]))
+                                                       ,A2(infoRow,
                                                        "2loopPerms",
                                                        $Basics.toString(_v26._3._4))(A2(buttonVal,
                                                        _v26._2,
@@ -4976,19 +5017,11 @@ Elm.Main.make = function (_elm) {
                                                                     _v26._2,
                                                                     1)))]),
                                                        _L.fromArray([A2($Html.div,
-                                                                    _L.fromArray([$Html$Attributes.$class("col-sm-12")]),
-                                                                    _L.fromArray([foundAnswerIndicator(_v26._3._6._1)(A2(buttonVal,
-                                                                    _v26._2,
-                                                                    1))]))
-                                                                    ,A2($Html.div,
                                                                     _L.fromArray([$Html$Attributes.$class("col-sm-2")]),
                                                                     _L.fromArray([$Html.text("findAnswers - ")]))
                                                                     ,A2($Html.div,
                                                                     _L.fromArray([$Html$Attributes.$class("col-sm-8")]),
                                                                     _L.fromArray([$Html.text($Basics.toString(_v26._3._6._1))]))]))
-                                                       ,A2($Html.br,
-                                                       _L.fromArray([]),
-                                                       _L.fromArray([]))
                                                        ,A2(infoRow,
                                                        "lazyAnswer - ",
                                                        $Basics.toString(_v26._3._6._4))(A2(buttonVal,
@@ -5022,7 +5055,7 @@ Elm.Main.make = function (_elm) {
                    break;}
               break;}
          _U.badCase($moduleName,
-         "between lines 283 and 386");
+         "between lines 282 and 391");
       }();
    });
    var viewLift = A2($Signal.map,
@@ -5052,8 +5085,8 @@ Elm.Main.make = function (_elm) {
                       ,ShowState: ShowState
                       ,updatesChnl: updatesChnl
                       ,buttonClassList: buttonClassList
-                      ,answersButton: answersButton
                       ,backButton: backButton
+                      ,answersButton: answersButton
                       ,stateButton: stateButton
                       ,perms2Button: perms2Button
                       ,perms3Button: perms3Button
