@@ -44,9 +44,13 @@ export module WheelCalcs {
   declare var R: _.RIf;
   declare var _: _.lodashIf;
 
+  interface Column extends Array<number> { 0: number, 1: number, 2: number}
+
   export type WheelPos         = Array<number>;
   export type WheelLoop        = Array<WheelPos>;
   export type LoopsPermutation = Array<WheelPos>;
+  export type LoopsPermColumn  = Column;
+  export type LoopsPermAnswers = Array<number>;
 
   export class Calcs1 { //implements CalcsIf
 
@@ -99,6 +103,64 @@ export module WheelCalcs {
 
       // NOTE: why flatten instead of concat
     }
+
+    sumColumn ([a, b, c]: LoopsPermColumn): number {
+      // convert strings to numbers, then add
+      return +(a) + +(b) + +(c);
+    }
+
+    columnsFromPermutation (perm: LoopsPermutation): Array<LoopsPermColumn> {
+      var firstPos = R.head(perm);
+      var secPos = R.head(R.drop(1, perm));
+      var thrPos = R.head(R.drop(2, perm));
+
+      var getSpecificPos = R.compose(R.head, R.drop);
+
+      return _.zip(firstPos, secPos, thrPos);
+    }
+
+      //var c = columnsFromPermutation(perms3[0]);
+
+    //var s = sumPlusPerm(perms3[0]);
+
+    answersPlusPerm (first: WheelPos, secLoop: WheelLoop,
+                                thrLoop: WheelLoop):
+    Array<[LoopsPermAnswers, LoopsPermutation]> {
+      var self = this;
+
+      function sumPlusPerm (perm: LoopsPermutation): Array<[LoopsPermAnswers, LoopsPermutation]> {
+        var cols:Array<LoopsPermColumn> = self.columnsFromPermutation(perm);
+
+        return [[cols.map(self.sumColumn), perm]];
+      }
+
+      var perms3 = this.threeLoopPerms(first, secLoop, thrLoop);
+
+      var ansPlus = perms3.map(sumPlusPerm)
+
+      return _.flatten(ansPlus);
+    }
+
+    //var a:Array<[LoopsPermAnswers, LoopsPermutation]> =
+    //answersPlusPerm(wheelPos1, secLoop, thrLoop);
+
+    findSpecificAnswer (first: WheelPos, secLoop: WheelLoop,
+                                 thrLoop: WheelLoop, answersLoop: WheelLoop):
+  Array<[LoopsPermAnswers, LoopsPermutation]> {
+    var candidates:Array<[LoopsPermAnswers, LoopsPermutation]> =
+      this.answersPlusPerm(first, secLoop, thrLoop);
+
+    function chkForAnswer ([ans, lists]:[LoopsPermAnswers, LoopsPermutation]): boolean {
+      // this code has no side effects, such as changing a var in a closure
+      var results:Array<WheelPos> = answersLoop.filter( val => _.isEqual(ans, val) );
+
+      return results.length > 0;
+    }
+
+    return candidates.filter(chkForAnswer);
+  }
+
+    //var f = findSpecificAnswer(wheelPos1, secLoop, thrLoop, ansLoop);
 
   }
 }

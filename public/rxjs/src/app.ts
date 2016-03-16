@@ -202,6 +202,14 @@ export class App {
     this.perms3 = this.calcs.threeLoopPerms(this.wheels[WheelNums.First],
       this.secLoop, this.thrLoop);
 
+    var c = this.calcs.columnsFromPermutation(this.perms3[0]);
+
+    // fn moved inside answersPlusPerms
+    //var s = this.calcs.sumPlusPerm(this.perms3[0]);
+
+    var a:Array<[WheelCalcs.LoopsPermAnswers, WheelCalcs.LoopsPermutation]> =
+      this.calcs.answersPlusPerm(this.wheels[WheelNums.First], this.secLoop, this.thrLoop);
+
     var i = 2;
   }
 
