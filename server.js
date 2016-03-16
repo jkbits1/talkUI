@@ -47,6 +47,14 @@
 
   server.route({
     method: 'GET',
+    path: '/',
+    handler: {
+      file: 'elm/puzzle2.html'
+    }
+  });
+
+  server.route({
+    method: 'GET',
     path: '/elm',
     handler: {
       file: 'elm/puzzle2.html'

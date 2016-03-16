@@ -17,6 +17,10 @@ enum WheelNums { First, Second, Third, Answers };
 <br>
 <div class="container">
   <div class="row">
+    <h2>RxJs Calculations</h2>
+  </div>
+  <br>
+  <div class="row">
     <input #wheel1 type="text" (keyup)="keyup1($event)" value="1,2,3">
     <input #wheel2 type="text" (keyup)="keyup2($event)" value="4,5,6">
     <input #wheel3 type="text" (keyup)="keyup3($event)" value="7,8,9">
