@@ -98,6 +98,15 @@ enum WheelNums { First, Second, Third, Answers };
       {{perms3}}
     </div>
   </div>
+  <br>
+  <div class="row">
+    <div class="col-sm-2 itemLabel">
+      Answer
+    </div>
+    <div class="col-sm-6">
+      {{answer}}
+    </div>
+  </div>
 <br>
 
 </div>
@@ -126,6 +135,8 @@ export class App {
   perms3: Array<WheelCalcs.LoopsPermutation> = [];
 
   calcs: WheelCalcs.Calcs1 = undefined;
+
+  answer: Any = undefined;
 
   //constructor(http:Http, jsonp:Jsonp) {
   constructor() {
@@ -180,7 +191,12 @@ export class App {
         id: this.id++,
         val: term
       });
-      self.wheels[wheelPos] = term.split(",");
+
+      var sNums = term.split(",");
+
+      var nums = sNums.map(val => +(val) );
+
+      self.wheels[wheelPos] = nums;
     }
 
     // need a better name
@@ -209,6 +225,10 @@ export class App {
 
     var a:Array<[WheelCalcs.LoopsPermAnswers, WheelCalcs.LoopsPermutation]> =
       this.calcs.answersPlusPerm(this.wheels[WheelNums.First], this.secLoop, this.thrLoop);
+
+    var f = this.calcs.findSpecificAnswer(this.wheels[WheelNums.First], this.secLoop, this.thrLoop, this.ansLoop);
+
+    this.answer = f;
 
     var i = 2;
   }
