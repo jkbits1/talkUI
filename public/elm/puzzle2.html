@@ -1,5 +1,7 @@
 <!DOCTYPE HTML>
-<html><head><meta charset="UTF-8"><link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css"><title>Elm Calculations</title><style>html,head,body { padding:0; margin:0; }
+<html><head><meta charset="UTF-8">
+  <link rel="stylesheet" href="css/tidy.css"><title>Elm Calculations
+</title><style>html,head,body { padding:0; margin:0; }
 body { font-family: calibri, helvetica, arial, sans-serif; }</style><script type="text/javascript">var Elm = Elm || { Native: {} };Elm.Array = Elm.Array || {};
 Elm.Array.make = function (_elm) {
    "use strict";
@@ -4332,7 +4334,7 @@ Elm.Main.make = function (_elm) {
                                  ,_0: "display"
                                  ,_1: "block"}]);}
          _U.badCase($moduleName,
-         "between lines 253 and 255");
+         "between lines 196 and 198");
       }();
    };
    var infoRow = F3(function (label,
@@ -4478,6 +4480,259 @@ Elm.Main.make = function (_elm) {
                                                                  ,{ctor: "_Tuple2"
                                                                   ,_0: "btn-default"
                                                                   ,_1: true}]));
+   var maxButton = 10;
+   var buttonVal = F2(function (list,
+   num) {
+      return function () {
+         var h = $List.head(A2($List.drop,
+         num - 1,
+         list));
+         return function () {
+            switch (h.ctor)
+            {case "Just": return h._0;
+               case "Nothing": return false;}
+            _U.badCase($moduleName,
+            "between lines 55 and 57");
+         }();
+      }();
+   });
+   var buttonListToggle = F2(function (list,
+   num) {
+      return A2($Basics._op["++"],
+      A2($List.take,num - 1,list),
+      A2($Basics._op["++"],
+      _L.fromArray([$Basics.not(A2(buttonVal,
+      list,
+      num))]),
+      A2($List.take,
+      maxButton - num,
+      A2($List.drop,num,list))));
+   });
+   var updateModel = F2(function (update,
+   _v3) {
+      return function () {
+         switch (_v3.ctor)
+         {case "_Tuple4":
+            switch (_v3._1.ctor)
+              {case "_Tuple5":
+                 return function () {
+                      var tailHistory = A2($Maybe.withDefault,
+                      _L.fromArray([]),
+                      $List.tail(_v3._0));
+                      var createModel = F3(function (_v14,
+                      buttonStates,
+                      forward) {
+                         return function () {
+                            switch (_v14.ctor)
+                            {case "_Tuple5":
+                               return function () {
+                                    var ansLoop = $PuzzleModule.makeAnsLoop(_v14._4);
+                                    var thrLoop = $PuzzleModule.makeThrLoop(_v14._3);
+                                    var secLoop = $PuzzleModule.makeSecLoop(_v14._2);
+                                    var answers = $PuzzleModule.wheelPositionFromString(_v14._4);
+                                    var first = $PuzzleModule.wheelPositionFromString(_v14._1);
+                                    var newCalcs = {ctor: "_Tuple7"
+                                                   ,_0: first
+                                                   ,_1: secLoop
+                                                   ,_2: thrLoop
+                                                   ,_3: ansLoop
+                                                   ,_4: A2($PuzzleModule.twoWheelPerms,
+                                                   first,
+                                                   secLoop)
+                                                   ,_5: A3($PuzzleModule.threeLoopPerms,
+                                                   first,
+                                                   secLoop,
+                                                   thrLoop)
+                                                   ,_6: {ctor: "_Tuple5"
+                                                        ,_0: A3($PuzzleModule.answersPlusPerm,
+                                                        first,
+                                                        secLoop,
+                                                        thrLoop)
+                                                        ,_1: A4($PuzzleModule.findSpecificAnswer,
+                                                        first,
+                                                        secLoop,
+                                                        thrLoop,
+                                                        ansLoop)
+                                                        ,_2: A3($PuzzleModule.answersPermsPlusList,
+                                                        first,
+                                                        secLoop,
+                                                        thrLoop)
+                                                        ,_3: A4($PuzzleModule.displaySpecificAnswers,
+                                                        first,
+                                                        secLoop,
+                                                        thrLoop,
+                                                        answers)
+                                                        ,_4: A4($PuzzleModule.findAnswerLazy3,
+                                                        first,
+                                                        secLoop,
+                                                        thrLoop,
+                                                        ansLoop)}};
+                                    var inputs = {ctor: "_Tuple5"
+                                                 ,_0: _v14._0
+                                                 ,_1: _v14._1
+                                                 ,_2: _v14._2
+                                                 ,_3: _v14._3
+                                                 ,_4: _v14._4};
+                                    var newHistory = _U.eq(forward,
+                                    true) ? A2($List._op["::"],
+                                    {ctor: "_Tuple2"
+                                    ,_0: inputs
+                                    ,_1: buttonStates},
+                                    _v3._0) : tailHistory;
+                                    return {ctor: "_Tuple4"
+                                           ,_0: newHistory
+                                           ,_1: inputs
+                                           ,_2: buttonStates
+                                           ,_3: newCalcs};
+                                 }();}
+                            _U.badCase($moduleName,
+                            "between lines 317 and 340");
+                         }();
+                      });
+                      var $ = A2($Maybe.withDefault,
+                      {ctor: "_Tuple2"
+                      ,_0: initialInputs
+                      ,_1: initialStates},
+                      $List.head(_v3._0)),
+                      inputs = $._0,
+                      states = $._1;
+                      var newCount = _v3._1._0 + 1;
+                      return function () {
+                         switch (update.ctor)
+                         {case "Back":
+                            return A3(createModel,
+                              inputs,
+                              states,
+                              false);
+                            case "Circle1Field":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: update._0
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              _v3._2,
+                              true);
+                            case "Circle2Field":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: update._0
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              _v3._2,
+                              true);
+                            case "Circle3Field":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: update._0
+                              ,_4: _v3._1._4},
+                              _v3._2,
+                              true);
+                            case "Circle4Field":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: update._0},
+                              _v3._2,
+                              true);
+                            case "NoOp":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: _v3._1._0
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              _v3._2,
+                              true);
+                            case "ShowAns":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,1),
+                              true);
+                            case "ShowLoop2":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,2),
+                              true);
+                            case "ShowLoop3":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,3),
+                              true);
+                            case "ShowLoopAns":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,4),
+                              true);
+                            case "ShowPerms2":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,5),
+                              true);
+                            case "ShowPerms3":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,6),
+                              true);
+                            case "ShowState":
+                            return A3(createModel,
+                              {ctor: "_Tuple5"
+                              ,_0: newCount
+                              ,_1: _v3._1._1
+                              ,_2: _v3._1._2
+                              ,_3: _v3._1._3
+                              ,_4: _v3._1._4},
+                              A2(buttonListToggle,_v3._2,7),
+                              true);}
+                         _U.badCase($moduleName,
+                         "between lines 342 and 361");
+                      }();
+                   }();}
+              break;}
+         _U.badCase($moduleName,
+         "between lines 309 and 361");
+      }();
+   });
    var ShowState = {ctor: "ShowState"};
    var ShowLazyAns = {ctor: "ShowLazyAns"};
    var ShowAns = {ctor: "ShowAns"};
@@ -4619,253 +4874,6 @@ Elm.Main.make = function (_elm) {
                                 ,$Html$Attributes.style(displayStyle(hide))]),
                    _L.fromArray([$Html.text(loopData)]))]));
    });
-   var maxButton = 10;
-   var buttonVal = F2(function (list,
-   num) {
-      return function () {
-         var h = $List.head(A2($List.drop,
-         num - 1,
-         list));
-         return function () {
-            switch (h.ctor)
-            {case "Just": return h._0;
-               case "Nothing": return false;}
-            _U.badCase($moduleName,
-            "between lines 31 and 33");
-         }();
-      }();
-   });
-   var buttonListToggle = F2(function (list,
-   num) {
-      return A2($Basics._op["++"],
-      A2($List.take,num - 1,list),
-      A2($Basics._op["++"],
-      _L.fromArray([$Basics.not(A2(buttonVal,
-      list,
-      num))]),
-      A2($List.take,
-      maxButton - num,
-      A2($List.drop,num,list))));
-   });
-   var updateModel = F2(function (update,
-   _v3) {
-      return function () {
-         switch (_v3.ctor)
-         {case "_Tuple4":
-            switch (_v3._1.ctor)
-              {case "_Tuple5":
-                 return function () {
-                      var tailHistory = A2($Maybe.withDefault,
-                      _L.fromArray([]),
-                      $List.tail(_v3._0));
-                      var createModel = F3(function (_v14,
-                      buttonStates,
-                      forward) {
-                         return function () {
-                            switch (_v14.ctor)
-                            {case "_Tuple5":
-                               return function () {
-                                    var inputs = {ctor: "_Tuple5"
-                                                 ,_0: _v14._0
-                                                 ,_1: _v14._1
-                                                 ,_2: _v14._2
-                                                 ,_3: _v14._3
-                                                 ,_4: _v14._4};
-                                    var ansLoop = $PuzzleModule.makeAnsLoop(_v14._4);
-                                    var thrLoop = $PuzzleModule.makeThrLoop(_v14._3);
-                                    var secLoop = $PuzzleModule.makeSecLoop(_v14._2);
-                                    var answers = $PuzzleModule.wheelPositionFromString(_v14._4);
-                                    var first = $PuzzleModule.wheelPositionFromString(_v14._1);
-                                    var newCalcs = {ctor: "_Tuple7"
-                                                   ,_0: first
-                                                   ,_1: secLoop
-                                                   ,_2: thrLoop
-                                                   ,_3: ansLoop
-                                                   ,_4: A2($PuzzleModule.twoWheelPerms,
-                                                   first,
-                                                   secLoop)
-                                                   ,_5: A3($PuzzleModule.threeLoopPerms,
-                                                   first,
-                                                   secLoop,
-                                                   thrLoop)
-                                                   ,_6: {ctor: "_Tuple5"
-                                                        ,_0: A3($PuzzleModule.answersPlusPerm,
-                                                        first,
-                                                        secLoop,
-                                                        thrLoop)
-                                                        ,_1: A4($PuzzleModule.findSpecificAnswer,
-                                                        first,
-                                                        secLoop,
-                                                        thrLoop,
-                                                        ansLoop)
-                                                        ,_2: A3($PuzzleModule.answersPermsPlusList,
-                                                        first,
-                                                        secLoop,
-                                                        thrLoop)
-                                                        ,_3: A4($PuzzleModule.displaySpecificAnswers,
-                                                        first,
-                                                        secLoop,
-                                                        thrLoop,
-                                                        answers)
-                                                        ,_4: A4($PuzzleModule.findAnswerLazy3,
-                                                        first,
-                                                        secLoop,
-                                                        thrLoop,
-                                                        ansLoop)}};
-                                    var newHistory = _U.eq(forward,
-                                    true) ? A2($List._op["::"],
-                                    {ctor: "_Tuple2"
-                                    ,_0: inputs
-                                    ,_1: buttonStates},
-                                    _v3._0) : tailHistory;
-                                    return {ctor: "_Tuple4"
-                                           ,_0: newHistory
-                                           ,_1: inputs
-                                           ,_2: buttonStates
-                                           ,_3: newCalcs};
-                                 }();}
-                            _U.badCase($moduleName,
-                            "between lines 461 and 481");
-                         }();
-                      });
-                      var $ = A2($Maybe.withDefault,
-                      {ctor: "_Tuple2"
-                      ,_0: initialInputs
-                      ,_1: initialStates},
-                      $List.head(_v3._0)),
-                      inputs = $._0,
-                      states = $._1;
-                      var newCount = _v3._1._0 + 1;
-                      return function () {
-                         switch (update.ctor)
-                         {case "Back":
-                            return A3(createModel,
-                              inputs,
-                              states,
-                              false);
-                            case "Circle1Field":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: update._0
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              _v3._2,
-                              true);
-                            case "Circle2Field":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: update._0
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              _v3._2,
-                              true);
-                            case "Circle3Field":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: update._0
-                              ,_4: _v3._1._4},
-                              _v3._2,
-                              true);
-                            case "Circle4Field":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: update._0},
-                              _v3._2,
-                              true);
-                            case "ShowAns":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,1),
-                              true);
-                            case "ShowLoop2":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,2),
-                              true);
-                            case "ShowLoop3":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,3),
-                              true);
-                            case "ShowLoopAns":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,4),
-                              true);
-                            case "ShowPerms2":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,5),
-                              true);
-                            case "ShowPerms3":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,6),
-                              true);
-                            case "ShowState":
-                            return A3(createModel,
-                              {ctor: "_Tuple5"
-                              ,_0: newCount
-                              ,_1: _v3._1._1
-                              ,_2: _v3._1._2
-                              ,_3: _v3._1._3
-                              ,_4: _v3._1._4},
-                              A2(buttonListToggle,_v3._2,7),
-                              true);}
-                         _U.badCase($moduleName,
-                         "between lines 483 and 505");
-                      }();
-                   }();}
-              break;}
-         _U.badCase($moduleName,
-         "between lines 454 and 505");
-      }();
-   });
-   var updateModelLift = A3($Signal.foldp,
-   updateModel,
-   initialModelState,
-   updatesChnl.signal);
    var view = F2(function (updatesChnlAddress,
    _v26) {
       return function () {
@@ -4968,8 +4976,8 @@ Elm.Main.make = function (_elm) {
                                                        3))
                                                        ,A6(wheelRow,
                                                        4,
-                                                       "Wheel Ans",
-                                                       "Loop Ans",
+                                                       "Wheel Answers",
+                                                       "Loop Answers",
                                                        _v26._1._4,
                                                        $Basics.toString(_v26._3._3),
                                                        ShowLoopAns)(A2(buttonVal,
@@ -4994,17 +5002,17 @@ Elm.Main.make = function (_elm) {
                                                        _L.fromArray([]),
                                                        _L.fromArray([]))
                                                        ,A2(infoRow,
-                                                       "2loopPerms",
+                                                       "2 Loop Perms",
                                                        $Basics.toString(_v26._3._4))(A2(buttonVal,
                                                        _v26._2,
                                                        5))
                                                        ,A2(infoRow,
-                                                       "3loopPerms - ",
+                                                       "3 Loop Perms",
                                                        $Basics.toString(_v26._3._5))(A2(buttonVal,
                                                        _v26._2,
                                                        6))
                                                        ,A2(infoRow,
-                                                       "answersPlus - ",
+                                                       "answersPlus",
                                                        $Basics.toString(_v26._3._6._0))(A2(buttonVal,
                                                        _v26._2,
                                                        1))
@@ -5055,17 +5063,18 @@ Elm.Main.make = function (_elm) {
                    break;}
               break;}
          _U.badCase($moduleName,
-         "between lines 282 and 391");
+         "between lines 225 and 291");
       }();
    });
+   var updateModelLift = A3($Signal.foldp,
+   updateModel,
+   initialModelState,
+   updatesChnl.signal);
    var viewLift = A2($Signal.map,
    view(updatesChnl.address),
    updateModelLift);
    var main = viewLift;
    _elm.Main.values = {_op: _op
-                      ,buttonVal: buttonVal
-                      ,maxButton: maxButton
-                      ,buttonListToggle: buttonListToggle
                       ,NoOp: NoOp
                       ,Add: Add
                       ,Remove: Remove
@@ -5084,6 +5093,9 @@ Elm.Main.make = function (_elm) {
                       ,ShowLazyAns: ShowLazyAns
                       ,ShowState: ShowState
                       ,updatesChnl: updatesChnl
+                      ,buttonVal: buttonVal
+                      ,maxButton: maxButton
+                      ,buttonListToggle: buttonListToggle
                       ,buttonClassList: buttonClassList
                       ,backButton: backButton
                       ,answersButton: answersButton
@@ -5106,12 +5118,12 @@ Elm.Main.make = function (_elm) {
                       ,main: main
                       ,viewLift: viewLift
                       ,view: view
+                      ,updateModelLift: updateModelLift
+                      ,updateModel: updateModel
                       ,initialInputs: initialInputs
                       ,initialStates: initialStates
                       ,initialCalcs: initialCalcs
-                      ,initialModelState: initialModelState
-                      ,updateModelLift: updateModelLift
-                      ,updateModel: updateModel};
+                      ,initialModelState: initialModelState};
    return _elm.Main.values;
 };Elm.Maybe = Elm.Maybe || {};
 Elm.Maybe.make = function (_elm) {
@@ -13820,7 +13832,7 @@ Elm.PuzzleModule.make = function (_elm) {
             case true:
             return getCounter(0);}
          _U.badCase($moduleName,
-         "between lines 214 and 224");
+         "between lines 213 and 223");
       }();
    };
    var elem2 = F2(function (a,
@@ -13841,15 +13853,15 @@ Elm.PuzzleModule.make = function (_elm) {
                               answerLoop._1);
                             case true: return false;}
                          _U.badCase($moduleName,
-                         "between lines 183 and 186");
+                         "between lines 182 and 185");
                       }();
                     case true: return true;}
                  _U.badCase($moduleName,
-                 "between lines 180 and 186");
+                 "between lines 179 and 185");
               }();
             case "[]": return false;}
          _U.badCase($moduleName,
-         "between lines 178 and 186");
+         "between lines 177 and 185");
       }();
    });
    var headX = function (xs) {
@@ -13863,7 +13875,7 @@ Elm.PuzzleModule.make = function (_elm) {
                       ,_0: _L.fromArray([_L.fromArray([0])])
                       ,_1: _L.fromArray([_L.fromArray([0])])};}
             _U.badCase($moduleName,
-            "between lines 172 and 174");
+            "between lines 171 and 173");
          }();
       }();
    };
@@ -13876,7 +13888,7 @@ Elm.PuzzleModule.make = function (_elm) {
                case "Nothing":
                return _L.fromArray([]);}
             _U.badCase($moduleName,
-            "between lines 114 and 116");
+            "between lines 113 and 115");
          }();
       }();
    };
@@ -13914,7 +13926,7 @@ Elm.PuzzleModule.make = function (_elm) {
                  thrLoop)])));
               }();}
          _U.badCase($moduleName,
-         "between lines 235 and 242");
+         "between lines 234 and 241");
       }();
    });
    var zip3 = F3(function (pos1,
@@ -13973,7 +13985,7 @@ Elm.PuzzleModule.make = function (_elm) {
          {case "_Tuple3":
             return _v16._0 + _v16._1 + _v16._2;}
          _U.badCase($moduleName,
-         "on line 89, column 23 to 32");
+         "on line 88, column 23 to 32");
       }();
    };
    var sumPlusPerm = function (perm) {
@@ -14001,7 +14013,7 @@ Elm.PuzzleModule.make = function (_elm) {
                {case "_Tuple2":
                   return _v25._0;}
                _U.badCase($moduleName,
-               "on line 265, column 23 to 24");
+               "on line 264, column 23 to 24");
             }();
          })($List.filter(function (_v21) {
             return function () {
@@ -14009,7 +14021,7 @@ Elm.PuzzleModule.make = function (_elm) {
                {case "_Tuple2":
                   return _U.eq(_v21._1,true);}
                _U.badCase($moduleName,
-               "on line 266, column 28 to 37");
+               "on line 265, column 28 to 37");
             }();
          })(A2($List.map,
          function (i) {
@@ -14092,7 +14104,7 @@ Elm.PuzzleModule.make = function (_elm) {
                  _v29._0,
                  answersLoop);}
             _U.badCase($moduleName,
-            "on line 134, column 29 to 53");
+            "on line 133, column 29 to 53");
          }();
       })(A3(answersPlusPerm,
       first,
@@ -14138,7 +14150,7 @@ Elm.PuzzleModule.make = function (_elm) {
                    ,_0: createWheelLoop(_v34._0)
                    ,_1: _v34._1};}
          _U.badCase($moduleName,
-         "on line 138, column 35 to 61");
+         "on line 137, column 35 to 61");
       }();
    };
    var answersPermsPlusList = F3(function (first,
@@ -14161,7 +14173,7 @@ Elm.PuzzleModule.make = function (_elm) {
                  answers,
                  _v38._0);}
             _U.badCase($moduleName,
-            "on line 149, column 30 to 47");
+            "on line 148, column 30 to 47");
          }();
       })(A3(answersPermsPlusList,
       first,
