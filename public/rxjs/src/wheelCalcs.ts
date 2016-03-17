@@ -52,7 +52,7 @@ export module WheelCalcs {
   export type LoopsPermColumn  = Column;
   export type LoopsPermAnswers = Array<number>;
 
-  export class Calcs1 { //implements CalcsIf
+  export class Calcs1 {
 
     constructor() {}
 
@@ -86,7 +86,6 @@ export module WheelCalcs {
     threeLoopPerms (first: WheelPos, secLoop: WheelLoop, thrLoop: WheelLoop): Array<LoopsPermutation> {
       var self = this;
 
-      // works with this
       var twoWheelPermsLocal = self.twoWheelPerms(first, secLoop);
 
       // AS CURRIED FUNCTION
@@ -94,14 +93,10 @@ export module WheelCalcs {
 
       // AS CLOSURE
       function addPosToTwoWheelPerms2 (thrPos: WheelPos): Array<LoopsPermutation> {
-        // fails with this
         return self.appendTwoWheelPerms(twoWheelPermsLocal, thrPos);
       }
 
-      //return _.flatten(thrLoop.map(addPosToTwoWheelPerms));
       return _.flatten(thrLoop.map(addPosToTwoWheelPerms2));
-
-      // NOTE: why flatten instead of concat
     }
 
     sumColumn ([a, b, c]: LoopsPermColumn): number {
@@ -118,10 +113,6 @@ export module WheelCalcs {
 
       return _.zip(firstPos, secPos, thrPos);
     }
-
-      //var c = columnsFromPermutation(perms3[0]);
-
-    //var s = sumPlusPerm(perms3[0]);
 
     answersPlusPerm (first: WheelPos, secLoop: WheelLoop,
                                 thrLoop: WheelLoop):
@@ -141,9 +132,6 @@ export module WheelCalcs {
       return _.flatten(ansPlus);
     }
 
-    //var a:Array<[LoopsPermAnswers, LoopsPermutation]> =
-    //answersPlusPerm(wheelPos1, secLoop, thrLoop);
-
     findSpecificAnswer (first: WheelPos, secLoop: WheelLoop,
                                  thrLoop: WheelLoop, answersLoop: WheelLoop):
   Array<[LoopsPermAnswers, LoopsPermutation]> {
@@ -159,8 +147,5 @@ export module WheelCalcs {
 
     return candidates.filter(chkForAnswer);
   }
-
-    //var f = findSpecificAnswer(wheelPos1, secLoop, thrLoop, ansLoop);
-
   }
 }

@@ -3,16 +3,12 @@
  */
 
 import {Component, FORM_DIRECTIVES, CORE_DIRECTIVES, Observable, EventEmitter} from 'angular2/angular2';
-//import {Http, URLSearchParams} from 'angular2/http';
-//import {JSONP_PROVIDERS, Jsonp} from 'angular2/http';
-//import { Calcs1 } from './wheelCalcs';
 import { WheelCalcs } from './wheelCalcs';
 
 enum WheelNums { First, Second, Third, Answers };
 
 @Component({
     selector: 'my-app',
-    //providers: [JSONP_PROVIDERS],
     template: `
 <br>
 <div class="container">
@@ -142,7 +138,6 @@ export class App {
 
   answer: Any = undefined;
 
-  //constructor(http:Http, jsonp:Jsonp) {
   constructor() {
     this.id = 0;
 
@@ -162,19 +157,13 @@ export class App {
     this.wheels[WheelNums.Second]   = [4, 5, 6];
     this.wheels[WheelNums.Third]    = [7, 8, 9];
     this.wheels[WheelNums.Answers]  = [12, 15, 18];
-
-    //var turn1:WheelCalcs.WheelPos =
-    //  this.calcs.turnWheel(this.wheels[1], 1);
   }
 
   handleWheelInputs (subject, results, wheelPos) {
     subject
       .debounceTime(50)
       .distinctUntilChanged()
-      //.switchMap(term => {
-      //})
       .subscribe(
-        // this returns a fn that handles input
         this.updateModel(this, results, wheelPos),
         error => {
           console.error('Error');
@@ -185,8 +174,6 @@ export class App {
       );
   }
 
-  // NOTE: this may be an abstraction too far, but keen to show this fn name
-  //       Especially, the self seems too fiddly
   updateModel (self, results, wheelPos) {
 
     function processInput (term) {
@@ -203,7 +190,6 @@ export class App {
       self.wheels[wheelPos] = nums;
     }
 
-    // need a better name
     function manageModel (term) {
       processInput(term);
 
@@ -224,17 +210,12 @@ export class App {
 
     var c = this.calcs.columnsFromPermutation(this.perms3[0]);
 
-    // fn moved inside answersPlusPerms
-    //var s = this.calcs.sumPlusPerm(this.perms3[0]);
-
     var a:Array<[WheelCalcs.LoopsPermAnswers, WheelCalcs.LoopsPermutation]> =
       this.calcs.answersPlusPerm(this.wheels[WheelNums.First], this.secLoop, this.thrLoop);
 
     var f = this.calcs.findSpecificAnswer(this.wheels[WheelNums.First], this.secLoop, this.thrLoop, this.ansLoop);
 
     this.answer = f;
-
-    var i = 2;
   }
 
   passOnEvent (input: EventEmitter, $event: any) {
@@ -259,6 +240,5 @@ export class App {
   }
 
   testclick ($event) {
-
   }
 }
