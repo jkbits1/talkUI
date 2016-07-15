@@ -61,7 +61,23 @@
     }
   });
 
-  server.route({
+server.route({
+  method: 'GET',
+  path: '/elmBasic',
+  handler: {
+    file: 'elmBasic/index.html'
+  }
+});
+
+server.route({
+  method: 'GET',
+  path: '/elmD3',
+  handler: {
+    file: 'elmD3/puzzle2-ui.html'
+  }
+});
+
+server.route({
     method: 'GET',
     path: '/rxjs',
     handler: {
