@@ -3,7 +3,7 @@
  */
 
 var node = document.getElementById("puzzle2-ui");
-var app = Elm.Main.embed(node);
+var app = Elm.WheelApp.embed(node);
 
 app.ports.showWheel.subscribe( data => {
 
