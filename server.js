@@ -49,7 +49,7 @@
     method: 'GET',
     path: '/',
     handler: {
-      file: 'elm/puzzle2.html'
+      file: './index.html'
     }
   });
 
@@ -65,7 +65,7 @@ server.route({
   method: 'GET',
   path: '/elmD3',
   handler: {
-    file: 'elmD3/puzzle2-ui.html'
+    file: 'elmD3/index.html'
   }
 });
 
