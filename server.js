@@ -63,17 +63,17 @@
 
 server.route({
   method: 'GET',
-  path: '/elmBasic',
+  path: '/elmD3',
   handler: {
-    file: 'elmBasic/index.html'
+    file: 'elmD3/puzzle2-ui.html'
   }
 });
 
 server.route({
   method: 'GET',
-  path: '/elmD3',
+  path: '/elmBasic',
   handler: {
-    file: 'elmD3/puzzle2-ui.html'
+    file: 'elmBasic/index.html'
   }
 });
 
