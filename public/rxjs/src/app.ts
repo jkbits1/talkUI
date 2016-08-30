@@ -17,6 +17,9 @@ enum WheelNums { First, Second, Third, Answers };
   <div class="row">
     <h2>RxJs Calculations</h2>
   </div>
+  <div class="row">
+    <h5>Change the values to see the algorithm automatically recalcuate</h5>
+  </div>
   <br>
   <div class="row">
     <input #wheel1 type="text" (keyup)="passOnEvent(wheel1subject, $event)" value="1,2,3">
