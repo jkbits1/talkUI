@@ -160,8 +160,8 @@ export class App {
     this.wheels[WheelNums.Answers]  = [12, 15, 18];
   }
 
-  handleWheelInputs (subject, results, wheelPos) {
-    subject
+  handleWheelInputs (input, results, wheelPos) {
+    input
       .debounceTime(50)
       .distinctUntilChanged()
       .subscribe(
