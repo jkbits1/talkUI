@@ -164,18 +164,40 @@ export class App {
   }
 
   handleWheelInputs (input, results, wheelPos) {
+    var distinctInput =
     input
       .debounceTime(50)
-      .distinctUntilChanged()
-      .subscribe(
-        this.updateModel(this, results, wheelPos),
-        error => {
-          console.error('Error');
-        },
-        () => {
-          console.log('Completed!');
-        }
-      );
+      .distinctUntilChanged();
+
+    distinctInput
+    .subscribe(
+      this.updateModel(this, results, wheelPos),
+      error,
+      completed
+    );
+
+    distinctInput.map(this.numsFromInput)
+    .subscribe(
+      nums => this.wheels[wheelPos] = nums,
+      error,
+      completed
+    );
+
+    function error () {
+      console.error('Error');
+    }
+
+    function completed () {
+      console.log('Completed!');
+    }
+  }
+
+  numsFromInput (inputData) {
+    var sNums = inputData.split(",");
+
+    var nums = sNums.map(val => +(val) );
+
+    return nums;
   }
 
   updateModel (self, results, wheelPos) {
@@ -186,12 +208,6 @@ export class App {
         id: this.id++,
         val: term
       });
-
-      var sNums = term.split(",");
-
-      var nums = sNums.map(val => +(val) );
-
-      self.wheels[wheelPos] = nums;
     }
 
     function manageModel (term) {
