@@ -8,6 +8,7 @@ import { WheelCalcs } from './wheelCalcs';
 import { Subject, BehaviorSubject }    from 'rxjs5';
 
 enum WheelNums { First, Second, Third, Answers };
+enum LoopNums { First, Second, Third, Answers };
 
 @Component({
     selector: 'my-app',
@@ -49,7 +50,7 @@ enum WheelNums { First, Second, Third, Answers };
       Loop 2
     </div>
     <div class="col-sm-2">
-      {{secLoop}}
+      {{loops[1].toString()}}
     </div>
   </div>
   <br>
@@ -64,7 +65,7 @@ enum WheelNums { First, Second, Third, Answers };
       Loop 3
     </div>
     <div class="col-sm-2">
-      {{thrLoop}}
+      {{loops[2].toString()}}
     </div>
   </div>
   <br>
@@ -79,7 +80,7 @@ enum WheelNums { First, Second, Third, Answers };
       Loop ans
     </div>
     <div class="col-sm-2">
-      {{ansLoop}}
+      {{loops[3].toString()}}
     </div>
   </div>
 
@@ -119,9 +120,14 @@ directives: [CORE_DIRECTIVES, FORM_DIRECTIVES]
 })
 export class App {
   private wheel1subject = new BehaviorSubject<string>("1,2,3");
-  private wheel2subject = new Subject<string>();
-  private wheel3subject = new Subject<string>();
-  private wheel4subject = new Subject<string>();
+  private wheel2subject = new BehaviorSubject<string>("4,5,6");
+  private wheel3subject = new BehaviorSubject<string>("7,8,9");
+  private wheel4subject = new BehaviorSubject<string>("12, 15, 18");
+
+  private wheel1observable : Observable; 
+  private wheel2observable : Observable; 
+  private wheel3observable : Observable; 
+  private wheel4observable : Observable;
 
   id: number = 0;
   results1 = [];
@@ -129,7 +135,9 @@ export class App {
   results3 = [];
   results4 = [];
 
-  wheels: Array<WheelCalcs.WheelPos> = [[],[], [], []];
+  wheels: Array<WheelCalcs.WheelPos> = [[], [], [], []];
+
+  loops: Array<WheelCalcs.WheelLoop> = [[], [], [], []];
 
   secLoop: WheelCalcs.WheelLoop = [];
   thrLoop: WheelCalcs.WheelLoop = [];
@@ -150,12 +158,22 @@ export class App {
     this.results3 = [3];
     this.results4 = [4];
 
-    this.handleWheelInputs(this.wheel1subject.asObservable(), this.results1, WheelNums.First);
-    this.handleWheelInputs(this.wheel2subject.asObservable(), this.results2, WheelNums.Second);
-    this.handleWheelInputs(this.wheel3subject.asObservable(), this.results3, WheelNums.Third);
-    this.handleWheelInputs(this.wheel4subject.asObservable(), this.results4, WheelNums.Answers);
+    this.wheel1observable = this.wheel1subject.asObservable();
+    this.wheel2observable = this.wheel2subject.asObservable();
+    this.wheel3observable = this.wheel3subject.asObservable();
+    this.wheel4observable = this.wheel4subject.asObservable();  
 
     this.calcs = new WheelCalcs.Calcs1();
+
+    this.handleWheelInputs(this.wheel1observable, this.results1, WheelNums.First);
+
+    var nums2input = this.handleWheelInputs(this.wheel2observable, this.results2, WheelNums.Second);
+    var nums3input = this.handleWheelInputs(this.wheel3observable, this.results3, WheelNums.Third);
+    var numsAnsInput = this.handleWheelInputs(this.wheel4observable, this.results4, WheelNums.Answers);
+
+    this.numsInputSubscribe(nums2input.numsInput, LoopNums.Second);
+    this.numsInputSubscribe(nums3input.numsInput, LoopNums.Third);
+    this.numsInputSubscribe(numsAnsInput.numsInput, LoopNums.Answers);
 
     this.wheels[WheelNums.First]    = [1, 2, 3];
     this.wheels[WheelNums.Second]   = [4, 5, 6];
@@ -163,22 +181,33 @@ export class App {
     this.wheels[WheelNums.Answers]  = [12, 15, 18];
   }
 
-  handleWheelInputs (input, results, wheelPos) {
-    var distinctInput =
-    input
-      .debounceTime(50)
-      .distinctUntilChanged();
+  numsInputSubscribe (numsInput, loopNum) {
+    numsInput.subscribe(
+      wheelNums => this.loops[loopNum] = this.calcs.createWheelLoop(wheelNums) 
+    );
+  }
 
-    distinctInput
+  handleWheelInputs (input, results, wheelPos) {
+    var distinctInput, numsInput;
+    
+    distinctInput =
+      input
+        .debounceTime(50)
+        .distinctUntilChanged();
+
+    numsInput =
+      distinctInput.map(this.numsFromInput);
+
+    numsInput
     .subscribe(
-      this.updateModel(this, results, wheelPos),
+      nums => this.wheels[wheelPos] = nums,
       error,
       completed
     );
 
-    distinctInput.map(this.numsFromInput)
+    distinctInput
     .subscribe(
-      nums => this.wheels[wheelPos] = nums,
+      this.updateModel(this, results, wheelPos),
       error,
       completed
     );
@@ -190,6 +219,10 @@ export class App {
     function completed () {
       console.log('Completed!');
     }
+
+    return {
+      numsInput: numsInput
+    };
   }
 
   numsFromInput (inputData) {
@@ -213,16 +246,16 @@ export class App {
     function manageModel (term) {
       processInput(term);
 
-      self.updateCalculations();
+      // self.updateCalculations();
     }
 
     return manageModel;
   }
 
   updateCalculations () {
-    this.secLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Second]);
-    this.thrLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Third]);
-    this.ansLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Answers]);
+    // this.secLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Second]);
+    // this.thrLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Third]);
+    // this.ansLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Answers]);
 
     this.perms2 = this.calcs.twoWheelPerms(this.wheels[WheelNums.First], this.secLoop);
     this.perms3 = this.calcs.threeLoopPerms(this.wheels[WheelNums.First],
