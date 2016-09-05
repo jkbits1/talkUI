@@ -167,13 +167,13 @@ export class App {
 
     this.handleWheelInputs(this.wheel1observable, this.results1, WheelNums.First);
 
-    var nums2input = this.handleWheelInputs(this.wheel2observable, this.results2, WheelNums.Second);
-    var nums3input = this.handleWheelInputs(this.wheel3observable, this.results3, WheelNums.Third);
-    var numsAnsInput = this.handleWheelInputs(this.wheel4observable, this.results4, WheelNums.Answers);
+    var wheelNums2 = this.handleWheelInputs(this.wheel2observable, this.results2, WheelNums.Second);
+    var wheelNums3 = this.handleWheelInputs(this.wheel3observable, this.results3, WheelNums.Third);
+    var wheelNumsAns = this.handleWheelInputs(this.wheel4observable, this.results4, WheelNums.Answers);
 
-    this.numsInputSubscribe(nums2input.numsInput, LoopNums.Second);
-    this.numsInputSubscribe(nums3input.numsInput, LoopNums.Third);
-    this.numsInputSubscribe(numsAnsInput.numsInput, LoopNums.Answers);
+    this.numsInputSubscribe(wheelNums2.wheelNums, LoopNums.Second);
+    this.numsInputSubscribe(wheelNums3.wheelNums, LoopNums.Third);
+    this.numsInputSubscribe(wheelNumsAns.wheelNums, LoopNums.Answers);
 
     this.wheels[WheelNums.First]    = [1, 2, 3];
     this.wheels[WheelNums.Second]   = [4, 5, 6];
@@ -188,17 +188,17 @@ export class App {
   }
 
   handleWheelInputs (input, results, wheelPos) {
-    var distinctInput, numsInput;
+    var distinctInput, wheelNums;
     
     distinctInput =
       input
         .debounceTime(50)
         .distinctUntilChanged();
 
-    numsInput =
+    wheelNums =
       distinctInput.map(this.numsFromInput);
 
-    numsInput
+    wheelNums
     .subscribe(
       nums => this.wheels[wheelPos] = nums,
       error,
@@ -221,7 +221,7 @@ export class App {
     }
 
     return {
-      numsInput: numsInput
+      wheelNums : wheelNums
     };
   }
 
