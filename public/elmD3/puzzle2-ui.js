@@ -1249,49 +1249,123 @@ var _elm_lang$core$Native_Utils = function() {
 
 // COMPARISONS
 
-function eq(rootX, rootY)
+function eq(x, y)
 {
-	var stack = [{ x: rootX, y: rootY }];
-	while (stack.length > 0)
+	var stack = [];
+	var isEqual = eqHelp(x, y, 0, stack);
+	var pair;
+	while (isEqual && (pair = stack.pop()))
 	{
-		var front = stack.pop();
-		var x = front.x;
-		var y = front.y;
-		if (x === y)
+		isEqual = eqHelp(pair.x, pair.y, 0, stack);
+	}
+	return isEqual;
+}
+
+
+function eqHelp(x, y, depth, stack)
+{
+	if (depth > 100)
+	{
+		stack.push({ x: x, y: y });
+		return true;
+	}
+
+	if (x === y)
+	{
+		return true;
+	}
+
+	if (typeof x !== 'object')
+	{
+		if (typeof x === 'function')
 		{
-			continue;
+			throw new Error(
+				'Trying to use `(==)` on functions. There is no way to know if functions are "the same" in the Elm sense.'
+				+ ' Read more about this at http://package.elm-lang.org/packages/elm-lang/core/latest/Basics#=='
+				+ ' which describes why it is this way and what the better version will look like.'
+			);
 		}
-		if (typeof x === 'object')
+		return false;
+	}
+
+	if (x === null || y === null)
+	{
+		return false
+	}
+
+	if (x instanceof Date)
+	{
+		return x.getTime() === y.getTime();
+	}
+
+	if (!('ctor' in x))
+	{
+		for (var key in x)
 		{
-			var c = 0;
-			for (var key in x)
-			{
-				++c;
-				if (!(key in y))
-				{
-					return false;
-				}
-				if (key === 'ctor')
-				{
-					continue;
-				}
-				stack.push({ x: x[key], y: y[key] });
-			}
-			if ('ctor' in x)
-			{
-				stack.push({ x: x.ctor, y: y.ctor});
-			}
-			if (c !== Object.keys(y).length)
+			if (!eqHelp(x[key], y[key], depth + 1, stack))
 			{
 				return false;
 			}
 		}
-		else if (typeof x === 'function')
+		return true;
+	}
+
+	// convert Dicts and Sets to lists
+	if (x.ctor === 'RBNode_elm_builtin' || x.ctor === 'RBEmpty_elm_builtin')
+	{
+		x = _elm_lang$core$Dict$toList(x);
+		y = _elm_lang$core$Dict$toList(y);
+	}
+	if (x.ctor === 'Set_elm_builtin')
+	{
+		x = _elm_lang$core$Set$toList(x);
+		y = _elm_lang$core$Set$toList(y);
+	}
+
+	// check if lists are equal without recursion
+	if (x.ctor === '::')
+	{
+		var a = x;
+		var b = y;
+		while (a.ctor === '::' && b.ctor === '::')
 		{
-			throw new Error('Equality error: general function equality is ' +
-							'undecidable, and therefore, unsupported');
+			if (!eqHelp(a._0, b._0, depth + 1, stack))
+			{
+				return false;
+			}
+			a = a._1;
+			b = b._1;
 		}
-		else
+		return a.ctor === b.ctor;
+	}
+
+	// check if Arrays are equal
+	if (x.ctor === '_Array')
+	{
+		var xs = _elm_lang$core$Native_Array.toJSArray(x);
+		var ys = _elm_lang$core$Native_Array.toJSArray(y);
+		if (xs.length !== ys.length)
+		{
+			return false;
+		}
+		for (var i = 0; i < xs.length; i++)
+		{
+			if (!eqHelp(xs[i], ys[i], depth + 1, stack))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	if (!eqHelp(x.ctor, y.ctor, depth + 1, stack))
+	{
+		return false;
+	}
+
+	for (var key in x)
+	{
+		if (!eqHelp(x[key], y[key], depth + 1, stack))
 		{
 			return false;
 		}
@@ -1306,34 +1380,23 @@ var LT = -1, EQ = 0, GT = 1;
 
 function cmp(x, y)
 {
-	var ord;
 	if (typeof x !== 'object')
 	{
 		return x === y ? EQ : x < y ? LT : GT;
 	}
-	else if (x instanceof String)
+
+	if (x instanceof String)
 	{
 		var a = x.valueOf();
 		var b = y.valueOf();
-		return a === b
-			? EQ
-			: a < b
-				? LT
-				: GT;
+		return a === b ? EQ : a < b ? LT : GT;
 	}
-	else if (x.ctor === '::' || x.ctor === '[]')
+
+	if (x.ctor === '::' || x.ctor === '[]')
 	{
-		while (true)
+		while (x.ctor === '::' && y.ctor === '::')
 		{
-			if (x.ctor === '[]' && y.ctor === '[]')
-			{
-				return EQ;
-			}
-			if (x.ctor !== y.ctor)
-			{
-				return x.ctor === '[]' ? LT : GT;
-			}
-			ord = cmp(x._0, y._0);
+			var ord = cmp(x._0, y._0);
 			if (ord !== EQ)
 			{
 				return ord;
@@ -1341,9 +1404,12 @@ function cmp(x, y)
 			x = x._1;
 			y = y._1;
 		}
+		return x.ctor === y.ctor ? EQ : x.ctor === '[]' ? LT : GT;
 	}
-	else if (x.ctor.slice(0, 6) === '_Tuple')
+
+	if (x.ctor.slice(0, 6) === '_Tuple')
 	{
+		var ord;
 		var n = x.ctor.slice(6) - 0;
 		var err = 'cannot compare tuples with more than 6 elements.';
 		if (n === 0) return EQ;
@@ -1356,12 +1422,12 @@ function cmp(x, y)
 		if (n >= 7) throw new Error('Comparison error: ' + err); } } } } } }
 		return EQ;
 	}
-	else
-	{
-		throw new Error('Comparison error: comparison is only defined on ints, ' +
-						'floats, times, chars, strings, lists of comparable values, ' +
-						'and tuples of comparable values.');
-	}
+
+	throw new Error(
+		'Comparison error: comparison is only defined on ints, '
+		+ 'floats, times, chars, strings, lists of comparable values, '
+		+ 'and tuples of comparable values.'
+	);
 }
 
 
@@ -1400,11 +1466,17 @@ function guid(_)
 function update(oldRecord, updatedFields)
 {
 	var newRecord = {};
+
 	for (var key in oldRecord)
 	{
-		var value = (key in updatedFields) ? updatedFields[key] : oldRecord[key];
-		newRecord[key] = value;
+		newRecord[key] = oldRecord[key];
 	}
+
+	for (var key in updatedFields)
+	{
+		newRecord[key] = updatedFields[key];
+	}
+
 	return newRecord;
 }
 
@@ -1574,24 +1646,14 @@ function toString(v)
 			return '[]';
 		}
 
-		if (v.ctor === 'RBNode_elm_builtin' || v.ctor === 'RBEmpty_elm_builtin' || v.ctor === 'Set_elm_builtin')
+		if (v.ctor === 'Set_elm_builtin')
 		{
-			var name, list;
-			if (v.ctor === 'Set_elm_builtin')
-			{
-				name = 'Set';
-				list = A2(
-					_elm_lang$core$List$map,
-					function(x) {return x._0; },
-					_elm_lang$core$Dict$toList(v._0)
-				);
-			}
-			else
-			{
-				name = 'Dict';
-				list = _elm_lang$core$Dict$toList(v);
-			}
-			return name + '.fromList ' + toString(list);
+			return 'Set.fromList ' + toString(_elm_lang$core$Set$toList(v));
+		}
+
+		if (v.ctor === 'RBNode_elm_builtin' || v.ctor === 'RBEmpty_elm_builtin')
+		{
+			return 'Dict.fromList ' + toString(_elm_lang$core$Dict$toList(v));
 		}
 
 		var output = '';
@@ -1608,6 +1670,16 @@ function toString(v)
 
 	if (type === 'object')
 	{
+		if (v instanceof Date)
+		{
+			return '<' + v.toString() + '>';
+		}
+
+		if (v.elm_web_socket)
+		{
+			return '<websocket>';
+		}
+
 		var output = [];
 		for (var k in v)
 		{
@@ -1660,10 +1732,19 @@ return {
 };
 
 }();
-var _elm_lang$core$Basics$uncurry = F2(
-	function (f, _p0) {
+var _elm_lang$core$Basics$never = function (_p0) {
+	never:
+	while (true) {
 		var _p1 = _p0;
-		return A2(f, _p1._0, _p1._1);
+		var _v1 = _p1._0;
+		_p0 = _v1;
+		continue never;
+	}
+};
+var _elm_lang$core$Basics$uncurry = F2(
+	function (f, _p2) {
+		var _p3 = _p2;
+		return A2(f, _p3._0, _p3._1);
 	});
 var _elm_lang$core$Basics$curry = F3(
 	function (f, a, b) {
@@ -1674,16 +1755,8 @@ var _elm_lang$core$Basics$flip = F3(
 	function (f, b, a) {
 		return A2(f, a, b);
 	});
-var _elm_lang$core$Basics$snd = function (_p2) {
-	var _p3 = _p2;
-	return _p3._1;
-};
-var _elm_lang$core$Basics$fst = function (_p4) {
-	var _p5 = _p4;
-	return _p5._0;
-};
 var _elm_lang$core$Basics$always = F2(
-	function (a, _p6) {
+	function (a, _p4) {
 		return a;
 	});
 var _elm_lang$core$Basics$identity = function (x) {
@@ -1781,8 +1854,8 @@ var _elm_lang$core$Basics$radians = function (t) {
 var _elm_lang$core$Basics$GT = {ctor: 'GT'};
 var _elm_lang$core$Basics$EQ = {ctor: 'EQ'};
 var _elm_lang$core$Basics$LT = {ctor: 'LT'};
-var _elm_lang$core$Basics$Never = function (a) {
-	return {ctor: 'Never', _0: a};
+var _elm_lang$core$Basics$JustOneMore = function (a) {
+	return {ctor: 'JustOneMore', _0: a};
 };
 
 var _elm_lang$core$Maybe$withDefault = F2(
@@ -1795,30 +1868,11 @@ var _elm_lang$core$Maybe$withDefault = F2(
 		}
 	});
 var _elm_lang$core$Maybe$Nothing = {ctor: 'Nothing'};
-var _elm_lang$core$Maybe$oneOf = function (maybes) {
-	oneOf:
-	while (true) {
-		var _p1 = maybes;
-		if (_p1.ctor === '[]') {
-			return _elm_lang$core$Maybe$Nothing;
-		} else {
-			var _p3 = _p1._0;
-			var _p2 = _p3;
-			if (_p2.ctor === 'Nothing') {
-				var _v3 = _p1._1;
-				maybes = _v3;
-				continue oneOf;
-			} else {
-				return _p3;
-			}
-		}
-	}
-};
 var _elm_lang$core$Maybe$andThen = F2(
-	function (maybeValue, callback) {
-		var _p4 = maybeValue;
-		if (_p4.ctor === 'Just') {
-			return callback(_p4._0);
+	function (callback, maybeValue) {
+		var _p1 = maybeValue;
+		if (_p1.ctor === 'Just') {
+			return callback(_p1._0);
 		} else {
 			return _elm_lang$core$Maybe$Nothing;
 		}
@@ -1828,50 +1882,50 @@ var _elm_lang$core$Maybe$Just = function (a) {
 };
 var _elm_lang$core$Maybe$map = F2(
 	function (f, maybe) {
-		var _p5 = maybe;
-		if (_p5.ctor === 'Just') {
+		var _p2 = maybe;
+		if (_p2.ctor === 'Just') {
 			return _elm_lang$core$Maybe$Just(
-				f(_p5._0));
+				f(_p2._0));
 		} else {
 			return _elm_lang$core$Maybe$Nothing;
 		}
 	});
 var _elm_lang$core$Maybe$map2 = F3(
 	function (func, ma, mb) {
-		var _p6 = {ctor: '_Tuple2', _0: ma, _1: mb};
-		if (((_p6.ctor === '_Tuple2') && (_p6._0.ctor === 'Just')) && (_p6._1.ctor === 'Just')) {
+		var _p3 = {ctor: '_Tuple2', _0: ma, _1: mb};
+		if (((_p3.ctor === '_Tuple2') && (_p3._0.ctor === 'Just')) && (_p3._1.ctor === 'Just')) {
 			return _elm_lang$core$Maybe$Just(
-				A2(func, _p6._0._0, _p6._1._0));
+				A2(func, _p3._0._0, _p3._1._0));
 		} else {
 			return _elm_lang$core$Maybe$Nothing;
 		}
 	});
 var _elm_lang$core$Maybe$map3 = F4(
 	function (func, ma, mb, mc) {
-		var _p7 = {ctor: '_Tuple3', _0: ma, _1: mb, _2: mc};
-		if ((((_p7.ctor === '_Tuple3') && (_p7._0.ctor === 'Just')) && (_p7._1.ctor === 'Just')) && (_p7._2.ctor === 'Just')) {
+		var _p4 = {ctor: '_Tuple3', _0: ma, _1: mb, _2: mc};
+		if ((((_p4.ctor === '_Tuple3') && (_p4._0.ctor === 'Just')) && (_p4._1.ctor === 'Just')) && (_p4._2.ctor === 'Just')) {
 			return _elm_lang$core$Maybe$Just(
-				A3(func, _p7._0._0, _p7._1._0, _p7._2._0));
+				A3(func, _p4._0._0, _p4._1._0, _p4._2._0));
 		} else {
 			return _elm_lang$core$Maybe$Nothing;
 		}
 	});
 var _elm_lang$core$Maybe$map4 = F5(
 	function (func, ma, mb, mc, md) {
-		var _p8 = {ctor: '_Tuple4', _0: ma, _1: mb, _2: mc, _3: md};
-		if (((((_p8.ctor === '_Tuple4') && (_p8._0.ctor === 'Just')) && (_p8._1.ctor === 'Just')) && (_p8._2.ctor === 'Just')) && (_p8._3.ctor === 'Just')) {
+		var _p5 = {ctor: '_Tuple4', _0: ma, _1: mb, _2: mc, _3: md};
+		if (((((_p5.ctor === '_Tuple4') && (_p5._0.ctor === 'Just')) && (_p5._1.ctor === 'Just')) && (_p5._2.ctor === 'Just')) && (_p5._3.ctor === 'Just')) {
 			return _elm_lang$core$Maybe$Just(
-				A4(func, _p8._0._0, _p8._1._0, _p8._2._0, _p8._3._0));
+				A4(func, _p5._0._0, _p5._1._0, _p5._2._0, _p5._3._0));
 		} else {
 			return _elm_lang$core$Maybe$Nothing;
 		}
 	});
 var _elm_lang$core$Maybe$map5 = F6(
 	function (func, ma, mb, mc, md, me) {
-		var _p9 = {ctor: '_Tuple5', _0: ma, _1: mb, _2: mc, _3: md, _4: me};
-		if ((((((_p9.ctor === '_Tuple5') && (_p9._0.ctor === 'Just')) && (_p9._1.ctor === 'Just')) && (_p9._2.ctor === 'Just')) && (_p9._3.ctor === 'Just')) && (_p9._4.ctor === 'Just')) {
+		var _p6 = {ctor: '_Tuple5', _0: ma, _1: mb, _2: mc, _3: md, _4: me};
+		if ((((((_p6.ctor === '_Tuple5') && (_p6._0.ctor === 'Just')) && (_p6._1.ctor === 'Just')) && (_p6._2.ctor === 'Just')) && (_p6._3.ctor === 'Just')) && (_p6._4.ctor === 'Just')) {
 			return _elm_lang$core$Maybe$Just(
-				A5(func, _p9._0._0, _p9._1._0, _p9._2._0, _p9._3._0, _p9._4._0));
+				A5(func, _p6._0._0, _p6._1._0, _p6._2._0, _p6._3._0, _p6._4._0));
 		} else {
 			return _elm_lang$core$Maybe$Nothing;
 		}
@@ -1907,21 +1961,6 @@ function toArray(xs)
 		xs = xs._1;
 	}
 	return out;
-}
-
-
-function range(lo, hi)
-{
-	var list = Nil;
-	if (lo <= hi)
-	{
-		do
-		{
-			list = Cons(hi, list);
-		}
-		while (hi-- > lo);
-	}
-	return list;
 }
 
 function foldr(f, b, xs)
@@ -2017,7 +2056,6 @@ return {
 	cons: F2(Cons),
 	toArray: toArray,
 	fromArray: fromArray,
-	range: range,
 
 	foldr: F3(foldr),
 
@@ -2081,14 +2119,12 @@ var _elm_lang$core$List$any = F2(
 	});
 var _elm_lang$core$List$all = F2(
 	function (isOkay, list) {
-		return _elm_lang$core$Basics$not(
-			A2(
-				_elm_lang$core$List$any,
-				function (_p2) {
-					return _elm_lang$core$Basics$not(
-						isOkay(_p2));
-				},
-				list));
+		return !A2(
+			_elm_lang$core$List$any,
+			function (_p2) {
+				return !isOkay(_p2);
+			},
+			list);
 	});
 var _elm_lang$core$List$foldr = _elm_lang$core$Native_List.foldr;
 var _elm_lang$core$List$foldl = F3(
@@ -2157,16 +2193,6 @@ var _elm_lang$core$List$minimum = function (list) {
 		return _elm_lang$core$Maybe$Nothing;
 	}
 };
-var _elm_lang$core$List$indexedMap = F2(
-	function (f, xs) {
-		return A3(
-			_elm_lang$core$List$map2,
-			f,
-			_elm_lang$core$Native_List.range(
-				0,
-				_elm_lang$core$List$length(xs) - 1),
-			xs);
-	});
 var _elm_lang$core$List$member = F2(
 	function (x, xs) {
 		return A2(
@@ -2208,33 +2234,32 @@ var _elm_lang$core$List$map = F2(
 			_elm_lang$core$List$foldr,
 			F2(
 				function (x, acc) {
-					return A2(
-						_elm_lang$core$List_ops['::'],
-						f(x),
-						acc);
+					return {
+						ctor: '::',
+						_0: f(x),
+						_1: acc
+					};
 				}),
-			_elm_lang$core$Native_List.fromArray(
-				[]),
+			{ctor: '[]'},
 			xs);
 	});
 var _elm_lang$core$List$filter = F2(
 	function (pred, xs) {
 		var conditionalCons = F2(
-			function (x, xs$) {
-				return pred(x) ? A2(_elm_lang$core$List_ops['::'], x, xs$) : xs$;
+			function (front, back) {
+				return pred(front) ? {ctor: '::', _0: front, _1: back} : back;
 			});
 		return A3(
 			_elm_lang$core$List$foldr,
 			conditionalCons,
-			_elm_lang$core$Native_List.fromArray(
-				[]),
+			{ctor: '[]'},
 			xs);
 	});
 var _elm_lang$core$List$maybeCons = F3(
 	function (f, mx, xs) {
 		var _p10 = f(mx);
 		if (_p10.ctor === 'Just') {
-			return A2(_elm_lang$core$List_ops['::'], _p10._0, xs);
+			return {ctor: '::', _0: _p10._0, _1: xs};
 		} else {
 			return xs;
 		}
@@ -2244,8 +2269,7 @@ var _elm_lang$core$List$filterMap = F2(
 		return A3(
 			_elm_lang$core$List$foldr,
 			_elm_lang$core$List$maybeCons(f),
-			_elm_lang$core$Native_List.fromArray(
-				[]),
+			{ctor: '[]'},
 			xs);
 	});
 var _elm_lang$core$List$reverse = function (list) {
@@ -2253,10 +2277,9 @@ var _elm_lang$core$List$reverse = function (list) {
 		_elm_lang$core$List$foldl,
 		F2(
 			function (x, y) {
-				return A2(_elm_lang$core$List_ops['::'], x, y);
+				return {ctor: '::', _0: x, _1: y};
 			}),
-		_elm_lang$core$Native_List.fromArray(
-			[]),
+		{ctor: '[]'},
 		list);
 };
 var _elm_lang$core$List$scanl = F3(
@@ -2265,21 +2288,24 @@ var _elm_lang$core$List$scanl = F3(
 			function (x, accAcc) {
 				var _p11 = accAcc;
 				if (_p11.ctor === '::') {
-					return A2(
-						_elm_lang$core$List_ops['::'],
-						A2(f, x, _p11._0),
-						accAcc);
+					return {
+						ctor: '::',
+						_0: A2(f, x, _p11._0),
+						_1: accAcc
+					};
 				} else {
-					return _elm_lang$core$Native_List.fromArray(
-						[]);
+					return {ctor: '[]'};
 				}
 			});
 		return _elm_lang$core$List$reverse(
 			A3(
 				_elm_lang$core$List$foldl,
 				scan1,
-				_elm_lang$core$Native_List.fromArray(
-					[b]),
+				{
+					ctor: '::',
+					_0: b,
+					_1: {ctor: '[]'}
+				},
 				xs));
 	});
 var _elm_lang$core$List$append = F2(
@@ -2292,7 +2318,7 @@ var _elm_lang$core$List$append = F2(
 				_elm_lang$core$List$foldr,
 				F2(
 					function (x, y) {
-						return A2(_elm_lang$core$List_ops['::'], x, y);
+						return {ctor: '::', _0: x, _1: y};
 					}),
 				ys,
 				xs);
@@ -2302,8 +2328,7 @@ var _elm_lang$core$List$concat = function (lists) {
 	return A3(
 		_elm_lang$core$List$foldr,
 		_elm_lang$core$List$append,
-		_elm_lang$core$Native_List.fromArray(
-			[]),
+		{ctor: '[]'},
 		lists);
 };
 var _elm_lang$core$List$concatMap = F2(
@@ -2320,12 +2345,12 @@ var _elm_lang$core$List$partition = F2(
 				var _p15 = _p14._1;
 				return pred(x) ? {
 					ctor: '_Tuple2',
-					_0: A2(_elm_lang$core$List_ops['::'], x, _p16),
+					_0: {ctor: '::', _0: x, _1: _p16},
 					_1: _p15
 				} : {
 					ctor: '_Tuple2',
 					_0: _p16,
-					_1: A2(_elm_lang$core$List_ops['::'], x, _p15)
+					_1: {ctor: '::', _0: x, _1: _p15}
 				};
 			});
 		return A3(
@@ -2333,10 +2358,8 @@ var _elm_lang$core$List$partition = F2(
 			step,
 			{
 				ctor: '_Tuple2',
-				_0: _elm_lang$core$Native_List.fromArray(
-					[]),
-				_1: _elm_lang$core$Native_List.fromArray(
-					[])
+				_0: {ctor: '[]'},
+				_1: {ctor: '[]'}
 			},
 			list);
 	});
@@ -2347,8 +2370,8 @@ var _elm_lang$core$List$unzip = function (pairs) {
 			var _p20 = _p17;
 			return {
 				ctor: '_Tuple2',
-				_0: A2(_elm_lang$core$List_ops['::'], _p19._0, _p20._0),
-				_1: A2(_elm_lang$core$List_ops['::'], _p19._1, _p20._1)
+				_0: {ctor: '::', _0: _p19._0, _1: _p20._0},
+				_1: {ctor: '::', _0: _p19._1, _1: _p20._1}
 			};
 		});
 	return A3(
@@ -2356,10 +2379,8 @@ var _elm_lang$core$List$unzip = function (pairs) {
 		step,
 		{
 			ctor: '_Tuple2',
-			_0: _elm_lang$core$Native_List.fromArray(
-				[]),
-			_1: _elm_lang$core$Native_List.fromArray(
-				[])
+			_0: {ctor: '[]'},
+			_1: {ctor: '[]'}
 		},
 		pairs);
 };
@@ -2367,41 +2388,169 @@ var _elm_lang$core$List$intersperse = F2(
 	function (sep, xs) {
 		var _p21 = xs;
 		if (_p21.ctor === '[]') {
-			return _elm_lang$core$Native_List.fromArray(
-				[]);
+			return {ctor: '[]'};
 		} else {
 			var step = F2(
 				function (x, rest) {
-					return A2(
-						_elm_lang$core$List_ops['::'],
-						sep,
-						A2(_elm_lang$core$List_ops['::'], x, rest));
+					return {
+						ctor: '::',
+						_0: sep,
+						_1: {ctor: '::', _0: x, _1: rest}
+					};
 				});
 			var spersed = A3(
 				_elm_lang$core$List$foldr,
 				step,
-				_elm_lang$core$Native_List.fromArray(
-					[]),
+				{ctor: '[]'},
 				_p21._1);
-			return A2(_elm_lang$core$List_ops['::'], _p21._0, spersed);
+			return {ctor: '::', _0: _p21._0, _1: spersed};
+		}
+	});
+var _elm_lang$core$List$takeReverse = F3(
+	function (n, list, taken) {
+		takeReverse:
+		while (true) {
+			if (_elm_lang$core$Native_Utils.cmp(n, 0) < 1) {
+				return taken;
+			} else {
+				var _p22 = list;
+				if (_p22.ctor === '[]') {
+					return taken;
+				} else {
+					var _v23 = n - 1,
+						_v24 = _p22._1,
+						_v25 = {ctor: '::', _0: _p22._0, _1: taken};
+					n = _v23;
+					list = _v24;
+					taken = _v25;
+					continue takeReverse;
+				}
+			}
+		}
+	});
+var _elm_lang$core$List$takeTailRec = F2(
+	function (n, list) {
+		return _elm_lang$core$List$reverse(
+			A3(
+				_elm_lang$core$List$takeReverse,
+				n,
+				list,
+				{ctor: '[]'}));
+	});
+var _elm_lang$core$List$takeFast = F3(
+	function (ctr, n, list) {
+		if (_elm_lang$core$Native_Utils.cmp(n, 0) < 1) {
+			return {ctor: '[]'};
+		} else {
+			var _p23 = {ctor: '_Tuple2', _0: n, _1: list};
+			_v26_5:
+			do {
+				_v26_1:
+				do {
+					if (_p23.ctor === '_Tuple2') {
+						if (_p23._1.ctor === '[]') {
+							return list;
+						} else {
+							if (_p23._1._1.ctor === '::') {
+								switch (_p23._0) {
+									case 1:
+										break _v26_1;
+									case 2:
+										return {
+											ctor: '::',
+											_0: _p23._1._0,
+											_1: {
+												ctor: '::',
+												_0: _p23._1._1._0,
+												_1: {ctor: '[]'}
+											}
+										};
+									case 3:
+										if (_p23._1._1._1.ctor === '::') {
+											return {
+												ctor: '::',
+												_0: _p23._1._0,
+												_1: {
+													ctor: '::',
+													_0: _p23._1._1._0,
+													_1: {
+														ctor: '::',
+														_0: _p23._1._1._1._0,
+														_1: {ctor: '[]'}
+													}
+												}
+											};
+										} else {
+											break _v26_5;
+										}
+									default:
+										if ((_p23._1._1._1.ctor === '::') && (_p23._1._1._1._1.ctor === '::')) {
+											var _p28 = _p23._1._1._1._0;
+											var _p27 = _p23._1._1._0;
+											var _p26 = _p23._1._0;
+											var _p25 = _p23._1._1._1._1._0;
+											var _p24 = _p23._1._1._1._1._1;
+											return (_elm_lang$core$Native_Utils.cmp(ctr, 1000) > 0) ? {
+												ctor: '::',
+												_0: _p26,
+												_1: {
+													ctor: '::',
+													_0: _p27,
+													_1: {
+														ctor: '::',
+														_0: _p28,
+														_1: {
+															ctor: '::',
+															_0: _p25,
+															_1: A2(_elm_lang$core$List$takeTailRec, n - 4, _p24)
+														}
+													}
+												}
+											} : {
+												ctor: '::',
+												_0: _p26,
+												_1: {
+													ctor: '::',
+													_0: _p27,
+													_1: {
+														ctor: '::',
+														_0: _p28,
+														_1: {
+															ctor: '::',
+															_0: _p25,
+															_1: A3(_elm_lang$core$List$takeFast, ctr + 1, n - 4, _p24)
+														}
+													}
+												}
+											};
+										} else {
+											break _v26_5;
+										}
+								}
+							} else {
+								if (_p23._0 === 1) {
+									break _v26_1;
+								} else {
+									break _v26_5;
+								}
+							}
+						}
+					} else {
+						break _v26_5;
+					}
+				} while(false);
+				return {
+					ctor: '::',
+					_0: _p23._1._0,
+					_1: {ctor: '[]'}
+				};
+			} while(false);
+			return list;
 		}
 	});
 var _elm_lang$core$List$take = F2(
 	function (n, list) {
-		if (_elm_lang$core$Native_Utils.cmp(n, 0) < 1) {
-			return _elm_lang$core$Native_List.fromArray(
-				[]);
-		} else {
-			var _p22 = list;
-			if (_p22.ctor === '[]') {
-				return list;
-			} else {
-				return A2(
-					_elm_lang$core$List_ops['::'],
-					_p22._0,
-					A2(_elm_lang$core$List$take, n - 1, _p22._1));
-			}
-		}
+		return A3(_elm_lang$core$List$takeFast, 0, n, list);
 	});
 var _elm_lang$core$List$repeatHelp = F3(
 	function (result, n, value) {
@@ -2410,12 +2559,12 @@ var _elm_lang$core$List$repeatHelp = F3(
 			if (_elm_lang$core$Native_Utils.cmp(n, 0) < 1) {
 				return result;
 			} else {
-				var _v23 = A2(_elm_lang$core$List_ops['::'], value, result),
-					_v24 = n - 1,
-					_v25 = value;
-				result = _v23;
-				n = _v24;
-				value = _v25;
+				var _v27 = {ctor: '::', _0: value, _1: result},
+					_v28 = n - 1,
+					_v29 = value;
+				result = _v27;
+				n = _v28;
+				value = _v29;
 				continue repeatHelp;
 			}
 		}
@@ -2424,10 +2573,45 @@ var _elm_lang$core$List$repeat = F2(
 	function (n, value) {
 		return A3(
 			_elm_lang$core$List$repeatHelp,
-			_elm_lang$core$Native_List.fromArray(
-				[]),
+			{ctor: '[]'},
 			n,
 			value);
+	});
+var _elm_lang$core$List$rangeHelp = F3(
+	function (lo, hi, list) {
+		rangeHelp:
+		while (true) {
+			if (_elm_lang$core$Native_Utils.cmp(lo, hi) < 1) {
+				var _v30 = lo,
+					_v31 = hi - 1,
+					_v32 = {ctor: '::', _0: hi, _1: list};
+				lo = _v30;
+				hi = _v31;
+				list = _v32;
+				continue rangeHelp;
+			} else {
+				return list;
+			}
+		}
+	});
+var _elm_lang$core$List$range = F2(
+	function (lo, hi) {
+		return A3(
+			_elm_lang$core$List$rangeHelp,
+			lo,
+			hi,
+			{ctor: '[]'});
+	});
+var _elm_lang$core$List$indexedMap = F2(
+	function (f, xs) {
+		return A3(
+			_elm_lang$core$List$map2,
+			f,
+			A2(
+				_elm_lang$core$List$range,
+				0,
+				_elm_lang$core$List$length(xs) - 1),
+			xs);
 	});
 
 var _elm_lang$core$Array$append = _elm_lang$core$Native_Array.append;
@@ -2467,7 +2651,8 @@ var _elm_lang$core$Array$toIndexedList = function (array) {
 			function (v0, v1) {
 				return {ctor: '_Tuple2', _0: v0, _1: v1};
 			}),
-		_elm_lang$core$Native_List.range(
+		A2(
+			_elm_lang$core$List$range,
 			0,
 			_elm_lang$core$Native_Array.length(array) - 1),
 		_elm_lang$core$Native_Array.toList(array));
@@ -2568,11 +2753,11 @@ var _elm_lang$core$Color$rgbToHsl = F3(
 	});
 var _elm_lang$core$Color$hslToRgb = F3(
 	function (hue, saturation, lightness) {
-		var hue$ = hue / _elm_lang$core$Basics$degrees(60);
+		var normHue = hue / _elm_lang$core$Basics$degrees(60);
 		var chroma = (1 - _elm_lang$core$Basics$abs((2 * lightness) - 1)) * saturation;
 		var x = chroma * (1 - _elm_lang$core$Basics$abs(
-			A2(_elm_lang$core$Color$fmod, hue$, 2) - 1));
-		var _p0 = (_elm_lang$core$Native_Utils.cmp(hue$, 0) < 0) ? {ctor: '_Tuple3', _0: 0, _1: 0, _2: 0} : ((_elm_lang$core$Native_Utils.cmp(hue$, 1) < 0) ? {ctor: '_Tuple3', _0: chroma, _1: x, _2: 0} : ((_elm_lang$core$Native_Utils.cmp(hue$, 2) < 0) ? {ctor: '_Tuple3', _0: x, _1: chroma, _2: 0} : ((_elm_lang$core$Native_Utils.cmp(hue$, 3) < 0) ? {ctor: '_Tuple3', _0: 0, _1: chroma, _2: x} : ((_elm_lang$core$Native_Utils.cmp(hue$, 4) < 0) ? {ctor: '_Tuple3', _0: 0, _1: x, _2: chroma} : ((_elm_lang$core$Native_Utils.cmp(hue$, 5) < 0) ? {ctor: '_Tuple3', _0: x, _1: 0, _2: chroma} : ((_elm_lang$core$Native_Utils.cmp(hue$, 6) < 0) ? {ctor: '_Tuple3', _0: chroma, _1: 0, _2: x} : {ctor: '_Tuple3', _0: 0, _1: 0, _2: 0}))))));
+			A2(_elm_lang$core$Color$fmod, normHue, 2) - 1));
+		var _p0 = (_elm_lang$core$Native_Utils.cmp(normHue, 0) < 0) ? {ctor: '_Tuple3', _0: 0, _1: 0, _2: 0} : ((_elm_lang$core$Native_Utils.cmp(normHue, 1) < 0) ? {ctor: '_Tuple3', _0: chroma, _1: x, _2: 0} : ((_elm_lang$core$Native_Utils.cmp(normHue, 2) < 0) ? {ctor: '_Tuple3', _0: x, _1: chroma, _2: 0} : ((_elm_lang$core$Native_Utils.cmp(normHue, 3) < 0) ? {ctor: '_Tuple3', _0: 0, _1: chroma, _2: x} : ((_elm_lang$core$Native_Utils.cmp(normHue, 4) < 0) ? {ctor: '_Tuple3', _0: 0, _1: x, _2: chroma} : ((_elm_lang$core$Native_Utils.cmp(normHue, 5) < 0) ? {ctor: '_Tuple3', _0: x, _1: 0, _2: chroma} : ((_elm_lang$core$Native_Utils.cmp(normHue, 6) < 0) ? {ctor: '_Tuple3', _0: chroma, _1: 0, _2: x} : {ctor: '_Tuple3', _0: 0, _1: 0, _2: 0}))))));
 		var r = _p0._0;
 		var g = _p0._1;
 		var b = _p0._2;
@@ -2741,21 +2926,21 @@ function nativeBinding(callback)
 	};
 }
 
-function andThen(task, callback)
+function andThen(callback, task)
 {
 	return {
 		ctor: '_Task_andThen',
-		task: task,
-		callback: callback
+		callback: callback,
+		task: task
 	};
 }
 
-function onError(task, callback)
+function onError(callback, task)
 {
 	return {
 		ctor: '_Task_onError',
-		task: task,
-		callback: callback
+		callback: callback,
+		task: task
 	};
 }
 
@@ -2956,7 +3141,10 @@ function work()
 	var process;
 	while (numSteps < MAX_STEPS && (process = workQueue.shift()))
 	{
-		numSteps = step(numSteps, process);
+		if (process.root)
+		{
+			numSteps = step(numSteps, process);
+		}
 	}
 	if (!process)
 	{
@@ -2992,167 +3180,109 @@ var _elm_lang$core$Native_Platform = function() {
 
 // PROGRAMS
 
-function addPublicModule(object, name, main)
+function program(impl)
 {
-	var init = main ? makeEmbed(name, main) : mainIsUndefined(name);
-
-	object['worker'] = function worker(flags)
+	return function(flagDecoder)
 	{
-		return init(undefined, flags, false);
-	}
-
-	object['embed'] = function embed(domNode, flags)
-	{
-		return init(domNode, flags, true);
-	}
-
-	object['fullscreen'] = function fullscreen(flags)
-	{
-		return init(document.body, flags, true);
-	};
-}
-
-
-// PROGRAM FAIL
-
-function mainIsUndefined(name)
-{
-	return function(domNode)
-	{
-		var message = 'Cannot initialize module `' + name +
-			'` because it has no `main` value!\nWhat should I show on screen?';
-		domNode.innerHTML = errorHtml(message);
-		throw new Error(message);
-	};
-}
-
-function errorHtml(message)
-{
-	return '<div style="padding-left:1em;">'
-		+ '<h2 style="font-weight:normal;"><b>Oops!</b> Something went wrong when starting your Elm program.</h2>'
-		+ '<pre style="padding-left:1em;">' + message + '</pre>'
-		+ '</div>';
-}
-
-
-// PROGRAM SUCCESS
-
-function makeEmbed(moduleName, main)
-{
-	return function embed(rootDomNode, flags, withRenderer)
-	{
-		try
+		return function(object, moduleName)
 		{
-			var program = mainToProgram(moduleName, main);
-			if (!withRenderer)
+			object['worker'] = function worker(flags)
 			{
-				program.renderer = dummyRenderer;
-			}
-			return makeEmbedHelp(moduleName, program, rootDomNode, flags);
-		}
-		catch (e)
-		{
-			rootDomNode.innerHTML = errorHtml(e.message);
-			throw e;
-		}
+				if (typeof flags !== 'undefined')
+				{
+					throw new Error(
+						'The `' + moduleName + '` module does not need flags.\n'
+						+ 'Call ' + moduleName + '.worker() with no arguments and you should be all set!'
+					);
+				}
+
+				return initialize(
+					impl.init,
+					impl.update,
+					impl.subscriptions,
+					renderer
+				);
+			};
+		};
 	};
 }
 
-function dummyRenderer()
+function programWithFlags(impl)
 {
-	return { update: function() {} };
+	return function(flagDecoder)
+	{
+		return function(object, moduleName)
+		{
+			object['worker'] = function worker(flags)
+			{
+				if (typeof flagDecoder === 'undefined')
+				{
+					throw new Error(
+						'Are you trying to sneak a Never value into Elm? Trickster!\n'
+						+ 'It looks like ' + moduleName + '.main is defined with `programWithFlags` but has type `Program Never`.\n'
+						+ 'Use `program` instead if you do not want flags.'
+					);
+				}
+
+				var result = A2(_elm_lang$core$Native_Json.run, flagDecoder, flags);
+				if (result.ctor === 'Err')
+				{
+					throw new Error(
+						moduleName + '.worker(...) was called with an unexpected argument.\n'
+						+ 'I tried to convert it to an Elm value, but ran into this problem:\n\n'
+						+ result._0
+					);
+				}
+
+				return initialize(
+					impl.init(result._0),
+					impl.update,
+					impl.subscriptions,
+					renderer
+				);
+			};
+		};
+	};
+}
+
+function renderer(enqueue, _)
+{
+	return function(_) {};
 }
 
 
-// MAIN TO PROGRAM
+// HTML TO PROGRAM
 
-function mainToProgram(moduleName, wrappedMain)
+function htmlToProgram(vnode)
 {
-	var main = wrappedMain.main;
+	var emptyBag = batch(_elm_lang$core$Native_List.Nil);
+	var noChange = _elm_lang$core$Native_Utils.Tuple2(
+		_elm_lang$core$Native_Utils.Tuple0,
+		emptyBag
+	);
 
-	if (typeof main.init === 'undefined')
-	{
-		var emptyBag = batch(_elm_lang$core$Native_List.Nil);
-		var noChange = _elm_lang$core$Native_Utils.Tuple2(
-			_elm_lang$core$Native_Utils.Tuple0,
-			emptyBag
-		);
-
-		return _elm_lang$virtual_dom$VirtualDom$programWithFlags({
-			init: function() { return noChange; },
-			view: function() { return main; },
-			update: F2(function() { return noChange; }),
-			subscriptions: function () { return emptyBag; }
-		});
-	}
-
-	var flags = wrappedMain.flags;
-	var init = flags
-		? initWithFlags(moduleName, main.init, flags)
-		: initWithoutFlags(moduleName, main.init);
-
-	return _elm_lang$virtual_dom$VirtualDom$programWithFlags({
-		init: init,
-		view: main.view,
-		update: main.update,
-		subscriptions: main.subscriptions,
+	return _elm_lang$virtual_dom$VirtualDom$program({
+		init: noChange,
+		view: function(model) { return main; },
+		update: F2(function(msg, model) { return noChange; }),
+		subscriptions: function (model) { return emptyBag; }
 	});
 }
 
-function initWithoutFlags(moduleName, realInit)
+
+// INITIALIZE A PROGRAM
+
+function initialize(init, update, subscriptions, renderer)
 {
-	return function init(flags)
-	{
-		if (typeof flags !== 'undefined')
-		{
-			throw new Error(
-				'You are giving module `' + moduleName + '` an argument in JavaScript.\n'
-				+ 'This module does not take arguments though! You probably need to change the\n'
-				+ 'initialization code to something like `Elm.' + moduleName + '.fullscreen()`'
-			);
-		}
-		return realInit();
-	};
-}
-
-function initWithFlags(moduleName, realInit, flagDecoder)
-{
-	return function init(flags)
-	{
-		var result = A2(_elm_lang$core$Native_Json.run, flagDecoder, flags);
-		if (result.ctor === 'Err')
-		{
-			throw new Error(
-				'You are trying to initialize module `' + moduleName + '` with an unexpected argument.\n'
-				+ 'When trying to convert it to a usable Elm value, I run into this problem:\n\n'
-				+ result._0
-			);
-		}
-		return realInit(result._0);
-	};
-}
-
-
-// SETUP RUNTIME SYSTEM
-
-function makeEmbedHelp(moduleName, program, rootDomNode, flags)
-{
-	var init = program.init;
-	var update = program.update;
-	var subscriptions = program.subscriptions;
-	var view = program.view;
-	var makeRenderer = program.renderer;
-
 	// ambient state
 	var managers = {};
-	var renderer;
+	var updateView;
 
 	// init and update state in main process
 	var initApp = _elm_lang$core$Native_Scheduler.nativeBinding(function(callback) {
-		var results = init(flags);
-		var model = results._0;
-		renderer = makeRenderer(rootDomNode, enqueue, view(model));
-		var cmds = results._1;
+		var model = init._0;
+		updateView = renderer(enqueue, model);
+		var cmds = init._1;
 		var subs = subscriptions(model);
 		dispatchEffects(managers, cmds, subs);
 		callback(_elm_lang$core$Native_Scheduler.succeed(model));
@@ -3163,7 +3293,7 @@ function makeEmbedHelp(moduleName, program, rootDomNode, flags)
 		return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback) {
 			var results = A2(update, msg, model);
 			model = results._0;
-			renderer.update(view(model));
+			updateView(model);
 			var cmds = results._1;
 			var subs = subscriptions(model);
 			dispatchEffects(managers, cmds, subs);
@@ -3277,10 +3407,10 @@ function spawnLoop(init, onMessage)
 		var handleMsg = _elm_lang$core$Native_Scheduler.receive(function(msg) {
 			return onMessage(msg, state);
 		});
-		return A2(andThen, handleMsg, loop);
+		return A2(andThen, loop, handleMsg);
 	}
 
-	var task = A2(andThen, init, loop);
+	var task = A2(andThen, loop, init);
 
 	return _elm_lang$core$Native_Scheduler.rawSpawn(task);
 }
@@ -3445,10 +3575,12 @@ function setupOutgoingPort(name)
 	{
 		while (cmdList.ctor !== '[]')
 		{
+			// grab a separate reference to subs in case unsubscribe is called
+			var currentSubs = subs;
 			var value = converter(cmdList._0);
-			for (var i = 0; i < subs.length; i++)
+			for (var i = 0; i < currentSubs.length; i++)
 			{
-				subs[i](value);
+				currentSubs[i](value);
 			}
 			cmdList = cmdList._1;
 		}
@@ -3467,6 +3599,9 @@ function setupOutgoingPort(name)
 
 	function unsubscribe(callback)
 	{
+		// copy subs into a new array in case unsubscribe is called within a
+		// subscribed callback
+		subs = subs.slice();
 		var index = subs.indexOf(callback);
 		if (index >= 0)
 		{
@@ -3505,17 +3640,40 @@ var incomingPortMap = F2(function subMap(tagger, finalTagger)
 
 function setupIncomingPort(name, callback)
 {
+	var sentBeforeInit = [];
 	var subs = _elm_lang$core$Native_List.Nil;
 	var converter = effectManagers[name].converter;
+	var currentOnEffects = preInitOnEffects;
+	var currentSend = preInitSend;
 
 	// CREATE MANAGER
 
 	var init = _elm_lang$core$Native_Scheduler.succeed(null);
 
-	function onEffects(router, subList, state)
+	function preInitOnEffects(router, subList, state)
+	{
+		var postInitResult = postInitOnEffects(router, subList, state);
+
+		for(var i = 0; i < sentBeforeInit.length; i++)
+		{
+			postInitSend(sentBeforeInit[i]);
+		}
+
+		sentBeforeInit = null; // to release objects held in queue
+		currentSend = postInitSend;
+		currentOnEffects = postInitOnEffects;
+		return postInitResult;
+	}
+
+	function postInitOnEffects(router, subList, state)
 	{
 		subs = subList;
 		return init;
+	}
+
+	function onEffects(router, subList, state)
+	{
+		return currentOnEffects(router, subList, state);
 	}
 
 	effectManagers[name].init = init;
@@ -3523,9 +3681,14 @@ function setupIncomingPort(name, callback)
 
 	// PUBLIC API
 
-	function send(value)
+	function preInitSend(value)
 	{
-		var result = A2(_elm_lang$core$Json_Decode$decodeValue, converter, value);
+		sentBeforeInit.push(value);
+	}
+
+	function postInitSend(incomingValue)
+	{
+		var result = A2(_elm_lang$core$Json_Decode$decodeValue, converter, incomingValue);
 		if (result.ctor === 'Err')
 		{
 			throw new Error('Trying to send an unexpected type of value through port `' + name + '`:\n' + result._0);
@@ -3540,6 +3703,11 @@ function setupIncomingPort(name, callback)
 		}
 	}
 
+	function send(incomingValue)
+	{
+		currentSend(incomingValue);
+	}
+
 	return { send: send };
 }
 
@@ -3549,11 +3717,14 @@ return {
 	sendToSelf: F2(sendToSelf),
 
 	// global setup
-	mainToProgram: mainToProgram,
 	effectManagers: effectManagers,
 	outgoingPort: outgoingPort,
 	incomingPort: incomingPort,
-	addPublicModule: addPublicModule,
+
+	htmlToProgram: htmlToProgram,
+	program: program,
+	programWithFlags: programWithFlags,
+	initialize: initialize,
 
 	// effect bags
 	leaf: leaf,
@@ -3562,18 +3733,10 @@ return {
 };
 
 }();
-var _elm_lang$core$Platform$hack = _elm_lang$core$Native_Scheduler.succeed;
-var _elm_lang$core$Platform$sendToSelf = _elm_lang$core$Native_Platform.sendToSelf;
-var _elm_lang$core$Platform$sendToApp = _elm_lang$core$Native_Platform.sendToApp;
-var _elm_lang$core$Platform$Program = {ctor: 'Program'};
-var _elm_lang$core$Platform$Task = {ctor: 'Task'};
-var _elm_lang$core$Platform$ProcessId = {ctor: 'ProcessId'};
-var _elm_lang$core$Platform$Router = {ctor: 'Router'};
 
 var _elm_lang$core$Platform_Cmd$batch = _elm_lang$core$Native_Platform.batch;
 var _elm_lang$core$Platform_Cmd$none = _elm_lang$core$Platform_Cmd$batch(
-	_elm_lang$core$Native_List.fromArray(
-		[]));
+	{ctor: '[]'});
 var _elm_lang$core$Platform_Cmd_ops = _elm_lang$core$Platform_Cmd_ops || {};
 _elm_lang$core$Platform_Cmd_ops['!'] = F2(
 	function (model, commands) {
@@ -3585,6 +3748,22 @@ _elm_lang$core$Platform_Cmd_ops['!'] = F2(
 	});
 var _elm_lang$core$Platform_Cmd$map = _elm_lang$core$Native_Platform.map;
 var _elm_lang$core$Platform_Cmd$Cmd = {ctor: 'Cmd'};
+
+var _elm_lang$core$Platform_Sub$batch = _elm_lang$core$Native_Platform.batch;
+var _elm_lang$core$Platform_Sub$none = _elm_lang$core$Platform_Sub$batch(
+	{ctor: '[]'});
+var _elm_lang$core$Platform_Sub$map = _elm_lang$core$Native_Platform.map;
+var _elm_lang$core$Platform_Sub$Sub = {ctor: 'Sub'};
+
+var _elm_lang$core$Platform$hack = _elm_lang$core$Native_Scheduler.succeed;
+var _elm_lang$core$Platform$sendToSelf = _elm_lang$core$Native_Platform.sendToSelf;
+var _elm_lang$core$Platform$sendToApp = _elm_lang$core$Native_Platform.sendToApp;
+var _elm_lang$core$Platform$programWithFlags = _elm_lang$core$Native_Platform.programWithFlags;
+var _elm_lang$core$Platform$program = _elm_lang$core$Native_Platform.program;
+var _elm_lang$core$Platform$Program = {ctor: 'Program'};
+var _elm_lang$core$Platform$Task = {ctor: 'Task'};
+var _elm_lang$core$Platform$ProcessId = {ctor: 'ProcessId'};
+var _elm_lang$core$Platform$Router = {ctor: 'Router'};
 
 var _elm_lang$core$Result$toMaybe = function (result) {
 	var _p0 = result;
@@ -3607,7 +3786,7 @@ var _elm_lang$core$Result$Err = function (a) {
 	return {ctor: 'Err', _0: a};
 };
 var _elm_lang$core$Result$andThen = F2(
-	function (result, callback) {
+	function (callback, result) {
 		var _p2 = result;
 		if (_p2.ctor === 'Ok') {
 			return callback(_p2._0);
@@ -3708,7 +3887,7 @@ var _elm_lang$core$Result$map5 = F6(
 			return _elm_lang$core$Result$Err(_p7._0._0);
 		}
 	});
-var _elm_lang$core$Result$formatError = F2(
+var _elm_lang$core$Result$mapError = F2(
 	function (f, result) {
 		var _p8 = result;
 		if (_p8.ctor === 'Ok') {
@@ -3950,13 +4129,21 @@ function endsWith(sub, str)
 function indexes(sub, str)
 {
 	var subLen = sub.length;
+	
+	if (subLen < 1)
+	{
+		return _elm_lang$core$Native_List.Nil;
+	}
+
 	var i = 0;
 	var is = [];
+
 	while ((i = str.indexOf(sub, i)) > -1)
 	{
 		is.push(i);
 		i = i + subLen;
-	}
+	}	
+	
 	return _elm_lang$core$Native_List.fromArray(is);
 }
 
@@ -4085,6 +4272,7 @@ return {
 };
 
 }();
+
 var _elm_lang$core$String$fromList = _elm_lang$core$Native_String.fromList;
 var _elm_lang$core$String$toList = _elm_lang$core$Native_String.toList;
 var _elm_lang$core$String$toFloat = _elm_lang$core$Native_String.toFloat;
@@ -4156,10 +4344,9 @@ var _elm_lang$core$Dict$keys = function (dict) {
 		_elm_lang$core$Dict$foldr,
 		F3(
 			function (key, value, keyList) {
-				return A2(_elm_lang$core$List_ops['::'], key, keyList);
+				return {ctor: '::', _0: key, _1: keyList};
 			}),
-		_elm_lang$core$Native_List.fromArray(
-			[]),
+		{ctor: '[]'},
 		dict);
 };
 var _elm_lang$core$Dict$values = function (dict) {
@@ -4167,10 +4354,9 @@ var _elm_lang$core$Dict$values = function (dict) {
 		_elm_lang$core$Dict$foldr,
 		F3(
 			function (key, value, valueList) {
-				return A2(_elm_lang$core$List_ops['::'], value, valueList);
+				return {ctor: '::', _0: value, _1: valueList};
 			}),
-		_elm_lang$core$Native_List.fromArray(
-			[]),
+		{ctor: '[]'},
 		dict);
 };
 var _elm_lang$core$Dict$toList = function (dict) {
@@ -4178,13 +4364,13 @@ var _elm_lang$core$Dict$toList = function (dict) {
 		_elm_lang$core$Dict$foldr,
 		F3(
 			function (key, value, list) {
-				return A2(
-					_elm_lang$core$List_ops['::'],
-					{ctor: '_Tuple2', _0: key, _1: value},
-					list);
+				return {
+					ctor: '::',
+					_0: {ctor: '_Tuple2', _0: key, _1: value},
+					_1: list
+				};
 			}),
-		_elm_lang$core$Native_List.fromArray(
-			[]),
+		{ctor: '[]'},
 		dict);
 };
 var _elm_lang$core$Dict$foldl = F3(
@@ -4213,33 +4399,50 @@ var _elm_lang$core$Dict$merge = F6(
 	function (leftStep, bothStep, rightStep, leftDict, rightDict, initialResult) {
 		var stepState = F3(
 			function (rKey, rValue, _p2) {
-				var _p3 = _p2;
-				var _p9 = _p3._1;
-				var _p8 = _p3._0;
-				var _p4 = _p8;
-				if (_p4.ctor === '[]') {
-					return {
-						ctor: '_Tuple2',
-						_0: _p8,
-						_1: A3(rightStep, rKey, rValue, _p9)
-					};
-				} else {
-					var _p7 = _p4._1;
-					var _p6 = _p4._0._1;
-					var _p5 = _p4._0._0;
-					return (_elm_lang$core$Native_Utils.cmp(_p5, rKey) < 0) ? {
-						ctor: '_Tuple2',
-						_0: _p7,
-						_1: A3(leftStep, _p5, _p6, _p9)
-					} : ((_elm_lang$core$Native_Utils.cmp(_p5, rKey) > 0) ? {
-						ctor: '_Tuple2',
-						_0: _p8,
-						_1: A3(rightStep, rKey, rValue, _p9)
-					} : {
-						ctor: '_Tuple2',
-						_0: _p7,
-						_1: A4(bothStep, _p5, _p6, rValue, _p9)
-					});
+				stepState:
+				while (true) {
+					var _p3 = _p2;
+					var _p9 = _p3._1;
+					var _p8 = _p3._0;
+					var _p4 = _p8;
+					if (_p4.ctor === '[]') {
+						return {
+							ctor: '_Tuple2',
+							_0: _p8,
+							_1: A3(rightStep, rKey, rValue, _p9)
+						};
+					} else {
+						var _p7 = _p4._1;
+						var _p6 = _p4._0._1;
+						var _p5 = _p4._0._0;
+						if (_elm_lang$core$Native_Utils.cmp(_p5, rKey) < 0) {
+							var _v10 = rKey,
+								_v11 = rValue,
+								_v12 = {
+								ctor: '_Tuple2',
+								_0: _p7,
+								_1: A3(leftStep, _p5, _p6, _p9)
+							};
+							rKey = _v10;
+							rValue = _v11;
+							_p2 = _v12;
+							continue stepState;
+						} else {
+							if (_elm_lang$core$Native_Utils.cmp(_p5, rKey) > 0) {
+								return {
+									ctor: '_Tuple2',
+									_0: _p8,
+									_1: A3(rightStep, rKey, rValue, _p9)
+								};
+							} else {
+								return {
+									ctor: '_Tuple2',
+									_0: _p7,
+									_1: A4(bothStep, _p5, _p6, rValue, _p9)
+								};
+							}
+						}
+					}
 				}
 			});
 		var _p10 = A3(
@@ -4267,34 +4470,59 @@ var _elm_lang$core$Dict$reportRemBug = F4(
 	function (msg, c, lgot, rgot) {
 		return _elm_lang$core$Native_Debug.crash(
 			_elm_lang$core$String$concat(
-				_elm_lang$core$Native_List.fromArray(
-					[
-						'Internal red-black tree invariant violated, expected ',
-						msg,
-						' and got ',
-						_elm_lang$core$Basics$toString(c),
-						'/',
-						lgot,
-						'/',
-						rgot,
-						'\nPlease report this bug to <https://github.com/elm-lang/core/issues>'
-					])));
+				{
+					ctor: '::',
+					_0: 'Internal red-black tree invariant violated, expected ',
+					_1: {
+						ctor: '::',
+						_0: msg,
+						_1: {
+							ctor: '::',
+							_0: ' and got ',
+							_1: {
+								ctor: '::',
+								_0: _elm_lang$core$Basics$toString(c),
+								_1: {
+									ctor: '::',
+									_0: '/',
+									_1: {
+										ctor: '::',
+										_0: lgot,
+										_1: {
+											ctor: '::',
+											_0: '/',
+											_1: {
+												ctor: '::',
+												_0: rgot,
+												_1: {
+													ctor: '::',
+													_0: '\nPlease report this bug to <https://github.com/elm-lang/core/issues>',
+													_1: {ctor: '[]'}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}));
 	});
 var _elm_lang$core$Dict$isBBlack = function (dict) {
 	var _p13 = dict;
-	_v11_2:
+	_v14_2:
 	do {
 		if (_p13.ctor === 'RBNode_elm_builtin') {
 			if (_p13._0.ctor === 'BBlack') {
 				return true;
 			} else {
-				break _v11_2;
+				break _v14_2;
 			}
 		} else {
 			if (_p13._0.ctor === 'LBBlack') {
 				return true;
 			} else {
-				break _v11_2;
+				break _v14_2;
 			}
 		}
 	} while(false);
@@ -4308,10 +4536,10 @@ var _elm_lang$core$Dict$sizeHelp = F2(
 			if (_p14.ctor === 'RBEmpty_elm_builtin') {
 				return n;
 			} else {
-				var _v13 = A2(_elm_lang$core$Dict$sizeHelp, n + 1, _p14._4),
-					_v14 = _p14._3;
-				n = _v13;
-				dict = _v14;
+				var _v16 = A2(_elm_lang$core$Dict$sizeHelp, n + 1, _p14._4),
+					_v17 = _p14._3;
+				n = _v16;
+				dict = _v17;
 				continue sizeHelp;
 			}
 		}
@@ -4330,18 +4558,18 @@ var _elm_lang$core$Dict$get = F2(
 				var _p16 = A2(_elm_lang$core$Basics$compare, targetKey, _p15._1);
 				switch (_p16.ctor) {
 					case 'LT':
-						var _v17 = targetKey,
-							_v18 = _p15._3;
-						targetKey = _v17;
-						dict = _v18;
+						var _v20 = targetKey,
+							_v21 = _p15._3;
+						targetKey = _v20;
+						dict = _v21;
 						continue get;
 					case 'EQ':
 						return _elm_lang$core$Maybe$Just(_p15._2);
 					default:
-						var _v19 = targetKey,
-							_v20 = _p15._4;
-						targetKey = _v19;
-						dict = _v20;
+						var _v22 = targetKey,
+							_v23 = _p15._4;
+						targetKey = _v22;
+						dict = _v23;
 						continue get;
 				}
 			}
@@ -4364,12 +4592,12 @@ var _elm_lang$core$Dict$maxWithDefault = F3(
 			if (_p18.ctor === 'RBEmpty_elm_builtin') {
 				return {ctor: '_Tuple2', _0: k, _1: v};
 			} else {
-				var _v23 = _p18._1,
-					_v24 = _p18._2,
-					_v25 = _p18._4;
-				k = _v23;
-				v = _v24;
-				r = _v25;
+				var _v26 = _p18._1,
+					_v27 = _p18._2,
+					_v28 = _p18._4;
+				k = _v26;
+				v = _v27;
+				r = _v28;
 				continue maxWithDefault;
 			}
 		}
@@ -4495,19 +4723,19 @@ var _elm_lang$core$Dict$redden = function (t) {
 };
 var _elm_lang$core$Dict$balanceHelp = function (tree) {
 	var _p27 = tree;
-	_v33_6:
+	_v36_6:
 	do {
-		_v33_5:
+		_v36_5:
 		do {
-			_v33_4:
+			_v36_4:
 			do {
-				_v33_3:
+				_v36_3:
 				do {
-					_v33_2:
+					_v36_2:
 					do {
-						_v33_1:
+						_v36_1:
 						do {
-							_v33_0:
+							_v36_0:
 							do {
 								if (_p27.ctor === 'RBNode_elm_builtin') {
 									if (_p27._3.ctor === 'RBNode_elm_builtin') {
@@ -4517,44 +4745,44 @@ var _elm_lang$core$Dict$balanceHelp = function (tree) {
 													switch (_p27._4._0.ctor) {
 														case 'Red':
 															if ((_p27._3._3.ctor === 'RBNode_elm_builtin') && (_p27._3._3._0.ctor === 'Red')) {
-																break _v33_0;
+																break _v36_0;
 															} else {
 																if ((_p27._3._4.ctor === 'RBNode_elm_builtin') && (_p27._3._4._0.ctor === 'Red')) {
-																	break _v33_1;
+																	break _v36_1;
 																} else {
 																	if ((_p27._4._3.ctor === 'RBNode_elm_builtin') && (_p27._4._3._0.ctor === 'Red')) {
-																		break _v33_2;
+																		break _v36_2;
 																	} else {
 																		if ((_p27._4._4.ctor === 'RBNode_elm_builtin') && (_p27._4._4._0.ctor === 'Red')) {
-																			break _v33_3;
+																			break _v36_3;
 																		} else {
-																			break _v33_6;
+																			break _v36_6;
 																		}
 																	}
 																}
 															}
 														case 'NBlack':
 															if ((_p27._3._3.ctor === 'RBNode_elm_builtin') && (_p27._3._3._0.ctor === 'Red')) {
-																break _v33_0;
+																break _v36_0;
 															} else {
 																if ((_p27._3._4.ctor === 'RBNode_elm_builtin') && (_p27._3._4._0.ctor === 'Red')) {
-																	break _v33_1;
+																	break _v36_1;
 																} else {
 																	if (((((_p27._0.ctor === 'BBlack') && (_p27._4._3.ctor === 'RBNode_elm_builtin')) && (_p27._4._3._0.ctor === 'Black')) && (_p27._4._4.ctor === 'RBNode_elm_builtin')) && (_p27._4._4._0.ctor === 'Black')) {
-																		break _v33_4;
+																		break _v36_4;
 																	} else {
-																		break _v33_6;
+																		break _v36_6;
 																	}
 																}
 															}
 														default:
 															if ((_p27._3._3.ctor === 'RBNode_elm_builtin') && (_p27._3._3._0.ctor === 'Red')) {
-																break _v33_0;
+																break _v36_0;
 															} else {
 																if ((_p27._3._4.ctor === 'RBNode_elm_builtin') && (_p27._3._4._0.ctor === 'Red')) {
-																	break _v33_1;
+																	break _v36_1;
 																} else {
-																	break _v33_6;
+																	break _v36_6;
 																}
 															}
 													}
@@ -4562,81 +4790,81 @@ var _elm_lang$core$Dict$balanceHelp = function (tree) {
 													switch (_p27._4._0.ctor) {
 														case 'Red':
 															if ((_p27._4._3.ctor === 'RBNode_elm_builtin') && (_p27._4._3._0.ctor === 'Red')) {
-																break _v33_2;
+																break _v36_2;
 															} else {
 																if ((_p27._4._4.ctor === 'RBNode_elm_builtin') && (_p27._4._4._0.ctor === 'Red')) {
-																	break _v33_3;
+																	break _v36_3;
 																} else {
 																	if (((((_p27._0.ctor === 'BBlack') && (_p27._3._3.ctor === 'RBNode_elm_builtin')) && (_p27._3._3._0.ctor === 'Black')) && (_p27._3._4.ctor === 'RBNode_elm_builtin')) && (_p27._3._4._0.ctor === 'Black')) {
-																		break _v33_5;
+																		break _v36_5;
 																	} else {
-																		break _v33_6;
+																		break _v36_6;
 																	}
 																}
 															}
 														case 'NBlack':
 															if (_p27._0.ctor === 'BBlack') {
 																if ((((_p27._4._3.ctor === 'RBNode_elm_builtin') && (_p27._4._3._0.ctor === 'Black')) && (_p27._4._4.ctor === 'RBNode_elm_builtin')) && (_p27._4._4._0.ctor === 'Black')) {
-																	break _v33_4;
+																	break _v36_4;
 																} else {
 																	if ((((_p27._3._3.ctor === 'RBNode_elm_builtin') && (_p27._3._3._0.ctor === 'Black')) && (_p27._3._4.ctor === 'RBNode_elm_builtin')) && (_p27._3._4._0.ctor === 'Black')) {
-																		break _v33_5;
+																		break _v36_5;
 																	} else {
-																		break _v33_6;
+																		break _v36_6;
 																	}
 																}
 															} else {
-																break _v33_6;
+																break _v36_6;
 															}
 														default:
 															if (((((_p27._0.ctor === 'BBlack') && (_p27._3._3.ctor === 'RBNode_elm_builtin')) && (_p27._3._3._0.ctor === 'Black')) && (_p27._3._4.ctor === 'RBNode_elm_builtin')) && (_p27._3._4._0.ctor === 'Black')) {
-																break _v33_5;
+																break _v36_5;
 															} else {
-																break _v33_6;
+																break _v36_6;
 															}
 													}
 												default:
 													switch (_p27._4._0.ctor) {
 														case 'Red':
 															if ((_p27._4._3.ctor === 'RBNode_elm_builtin') && (_p27._4._3._0.ctor === 'Red')) {
-																break _v33_2;
+																break _v36_2;
 															} else {
 																if ((_p27._4._4.ctor === 'RBNode_elm_builtin') && (_p27._4._4._0.ctor === 'Red')) {
-																	break _v33_3;
+																	break _v36_3;
 																} else {
-																	break _v33_6;
+																	break _v36_6;
 																}
 															}
 														case 'NBlack':
 															if (((((_p27._0.ctor === 'BBlack') && (_p27._4._3.ctor === 'RBNode_elm_builtin')) && (_p27._4._3._0.ctor === 'Black')) && (_p27._4._4.ctor === 'RBNode_elm_builtin')) && (_p27._4._4._0.ctor === 'Black')) {
-																break _v33_4;
+																break _v36_4;
 															} else {
-																break _v33_6;
+																break _v36_6;
 															}
 														default:
-															break _v33_6;
+															break _v36_6;
 													}
 											}
 										} else {
 											switch (_p27._3._0.ctor) {
 												case 'Red':
 													if ((_p27._3._3.ctor === 'RBNode_elm_builtin') && (_p27._3._3._0.ctor === 'Red')) {
-														break _v33_0;
+														break _v36_0;
 													} else {
 														if ((_p27._3._4.ctor === 'RBNode_elm_builtin') && (_p27._3._4._0.ctor === 'Red')) {
-															break _v33_1;
+															break _v36_1;
 														} else {
-															break _v33_6;
+															break _v36_6;
 														}
 													}
 												case 'NBlack':
 													if (((((_p27._0.ctor === 'BBlack') && (_p27._3._3.ctor === 'RBNode_elm_builtin')) && (_p27._3._3._0.ctor === 'Black')) && (_p27._3._4.ctor === 'RBNode_elm_builtin')) && (_p27._3._4._0.ctor === 'Black')) {
-														break _v33_5;
+														break _v36_5;
 													} else {
-														break _v33_6;
+														break _v36_6;
 													}
 												default:
-													break _v33_6;
+													break _v36_6;
 											}
 										}
 									} else {
@@ -4644,29 +4872,29 @@ var _elm_lang$core$Dict$balanceHelp = function (tree) {
 											switch (_p27._4._0.ctor) {
 												case 'Red':
 													if ((_p27._4._3.ctor === 'RBNode_elm_builtin') && (_p27._4._3._0.ctor === 'Red')) {
-														break _v33_2;
+														break _v36_2;
 													} else {
 														if ((_p27._4._4.ctor === 'RBNode_elm_builtin') && (_p27._4._4._0.ctor === 'Red')) {
-															break _v33_3;
+															break _v36_3;
 														} else {
-															break _v33_6;
+															break _v36_6;
 														}
 													}
 												case 'NBlack':
 													if (((((_p27._0.ctor === 'BBlack') && (_p27._4._3.ctor === 'RBNode_elm_builtin')) && (_p27._4._3._0.ctor === 'Black')) && (_p27._4._4.ctor === 'RBNode_elm_builtin')) && (_p27._4._4._0.ctor === 'Black')) {
-														break _v33_4;
+														break _v36_4;
 													} else {
-														break _v33_6;
+														break _v36_6;
 													}
 												default:
-													break _v33_6;
+													break _v36_6;
 											}
 										} else {
-											break _v33_6;
+											break _v36_6;
 										}
 									}
 								} else {
-									break _v33_6;
+									break _v36_6;
 								}
 							} while(false);
 							return _elm_lang$core$Dict$balancedTree(_p27._0)(_p27._3._3._1)(_p27._3._3._2)(_p27._3._1)(_p27._3._2)(_p27._1)(_p27._2)(_p27._3._3._3)(_p27._3._3._4)(_p27._3._4)(_p27._4);
@@ -4738,11 +4966,11 @@ var _elm_lang$core$Dict$removeMax = F5(
 		}
 	});
 var _elm_lang$core$Dict$rem = F3(
-	function (c, l, r) {
-		var _p29 = {ctor: '_Tuple2', _0: l, _1: r};
+	function (color, left, right) {
+		var _p29 = {ctor: '_Tuple2', _0: left, _1: right};
 		if (_p29._0.ctor === 'RBEmpty_elm_builtin') {
 			if (_p29._1.ctor === 'RBEmpty_elm_builtin') {
-				var _p30 = c;
+				var _p30 = color;
 				switch (_p30.ctor) {
 					case 'Red':
 						return _elm_lang$core$Dict$RBEmpty_elm_builtin(_elm_lang$core$Dict$LBlack);
@@ -4754,14 +4982,14 @@ var _elm_lang$core$Dict$rem = F3(
 			} else {
 				var _p33 = _p29._1._0;
 				var _p32 = _p29._0._0;
-				var _p31 = {ctor: '_Tuple3', _0: c, _1: _p32, _2: _p33};
+				var _p31 = {ctor: '_Tuple3', _0: color, _1: _p32, _2: _p33};
 				if ((((_p31.ctor === '_Tuple3') && (_p31._0.ctor === 'Black')) && (_p31._1.ctor === 'LBlack')) && (_p31._2.ctor === 'Red')) {
 					return A5(_elm_lang$core$Dict$RBNode_elm_builtin, _elm_lang$core$Dict$Black, _p29._1._1, _p29._1._2, _p29._1._3, _p29._1._4);
 				} else {
 					return A4(
 						_elm_lang$core$Dict$reportRemBug,
 						'Black/LBlack/Red',
-						c,
+						color,
 						_elm_lang$core$Basics$toString(_p32),
 						_elm_lang$core$Basics$toString(_p33));
 				}
@@ -4770,14 +4998,14 @@ var _elm_lang$core$Dict$rem = F3(
 			if (_p29._1.ctor === 'RBEmpty_elm_builtin') {
 				var _p36 = _p29._1._0;
 				var _p35 = _p29._0._0;
-				var _p34 = {ctor: '_Tuple3', _0: c, _1: _p35, _2: _p36};
+				var _p34 = {ctor: '_Tuple3', _0: color, _1: _p35, _2: _p36};
 				if ((((_p34.ctor === '_Tuple3') && (_p34._0.ctor === 'Black')) && (_p34._1.ctor === 'Red')) && (_p34._2.ctor === 'LBlack')) {
 					return A5(_elm_lang$core$Dict$RBNode_elm_builtin, _elm_lang$core$Dict$Black, _p29._0._1, _p29._0._2, _p29._0._3, _p29._0._4);
 				} else {
 					return A4(
 						_elm_lang$core$Dict$reportRemBug,
 						'Black/Red/LBlack',
-						c,
+						color,
 						_elm_lang$core$Basics$toString(_p35),
 						_elm_lang$core$Basics$toString(_p36));
 				}
@@ -4785,11 +5013,11 @@ var _elm_lang$core$Dict$rem = F3(
 				var _p40 = _p29._0._2;
 				var _p39 = _p29._0._4;
 				var _p38 = _p29._0._1;
-				var l$ = A5(_elm_lang$core$Dict$removeMax, _p29._0._0, _p38, _p40, _p29._0._3, _p39);
+				var newLeft = A5(_elm_lang$core$Dict$removeMax, _p29._0._0, _p38, _p40, _p29._0._3, _p39);
 				var _p37 = A3(_elm_lang$core$Dict$maxWithDefault, _p38, _p40, _p39);
 				var k = _p37._0;
 				var v = _p37._1;
-				return A5(_elm_lang$core$Dict$bubble, c, k, v, l$, r);
+				return A5(_elm_lang$core$Dict$bubble, color, k, v, newLeft, right);
 			}
 		}
 	});
@@ -5006,13 +5234,6 @@ var _elm_lang$core$Dict$diff = F2(
 			t2);
 	});
 
-var _elm_lang$core$Platform_Sub$batch = _elm_lang$core$Native_Platform.batch;
-var _elm_lang$core$Platform_Sub$none = _elm_lang$core$Platform_Sub$batch(
-	_elm_lang$core$Native_List.fromArray(
-		[]));
-var _elm_lang$core$Platform_Sub$map = _elm_lang$core$Native_Platform.map;
-var _elm_lang$core$Platform_Sub$Sub = {ctor: 'Sub'};
-
 var _elm_lang$core$Debug$crash = _elm_lang$core$Native_Debug.crash;
 var _elm_lang$core$Debug$log = _elm_lang$core$Native_Debug.log;
 
@@ -5077,6 +5298,16 @@ function decodeField(field, decoder)
 	};
 }
 
+function decodeIndex(index, decoder)
+{
+	return {
+		ctor: '<decoder>',
+		tag: 'index',
+		index: index,
+		decoder: decoder
+	};
+}
+
 function decodeKeyValuePairs(decoder)
 {
 	return {
@@ -5086,7 +5317,7 @@ function decodeKeyValuePairs(decoder)
 	};
 }
 
-function decodeObject(f, decoders)
+function mapMany(f, decoders)
 {
 	return {
 		ctor: '<decoder>',
@@ -5096,31 +5327,11 @@ function decodeObject(f, decoders)
 	};
 }
 
-function decodeTuple(f, decoders)
-{
-	return {
-		ctor: '<decoder>',
-		tag: 'tuple',
-		func: f,
-		decoders: decoders
-	};
-}
-
-function andThen(decoder, callback)
+function andThen(callback, decoder)
 {
 	return {
 		ctor: '<decoder>',
 		tag: 'andThen',
-		decoder: decoder,
-		callback: callback
-	};
-}
-
-function customAndThen(decoder, callback)
-{
-	return {
-		ctor: '<decoder>',
-		tag: 'customAndThen',
 		decoder: decoder,
 		callback: callback
 	};
@@ -5138,87 +5349,44 @@ function oneOf(decoders)
 
 // DECODING OBJECTS
 
-function decodeObject1(f, d1)
+function map1(f, d1)
 {
-	return decodeObject(f, [d1]);
+	return mapMany(f, [d1]);
 }
 
-function decodeObject2(f, d1, d2)
+function map2(f, d1, d2)
 {
-	return decodeObject(f, [d1, d2]);
+	return mapMany(f, [d1, d2]);
 }
 
-function decodeObject3(f, d1, d2, d3)
+function map3(f, d1, d2, d3)
 {
-	return decodeObject(f, [d1, d2, d3]);
+	return mapMany(f, [d1, d2, d3]);
 }
 
-function decodeObject4(f, d1, d2, d3, d4)
+function map4(f, d1, d2, d3, d4)
 {
-	return decodeObject(f, [d1, d2, d3, d4]);
+	return mapMany(f, [d1, d2, d3, d4]);
 }
 
-function decodeObject5(f, d1, d2, d3, d4, d5)
+function map5(f, d1, d2, d3, d4, d5)
 {
-	return decodeObject(f, [d1, d2, d3, d4, d5]);
+	return mapMany(f, [d1, d2, d3, d4, d5]);
 }
 
-function decodeObject6(f, d1, d2, d3, d4, d5, d6)
+function map6(f, d1, d2, d3, d4, d5, d6)
 {
-	return decodeObject(f, [d1, d2, d3, d4, d5, d6]);
+	return mapMany(f, [d1, d2, d3, d4, d5, d6]);
 }
 
-function decodeObject7(f, d1, d2, d3, d4, d5, d6, d7)
+function map7(f, d1, d2, d3, d4, d5, d6, d7)
 {
-	return decodeObject(f, [d1, d2, d3, d4, d5, d6, d7]);
+	return mapMany(f, [d1, d2, d3, d4, d5, d6, d7]);
 }
 
-function decodeObject8(f, d1, d2, d3, d4, d5, d6, d7, d8)
+function map8(f, d1, d2, d3, d4, d5, d6, d7, d8)
 {
-	return decodeObject(f, [d1, d2, d3, d4, d5, d6, d7, d8]);
-}
-
-
-// DECODING TUPLES
-
-function decodeTuple1(f, d1)
-{
-	return decodeTuple(f, [d1]);
-}
-
-function decodeTuple2(f, d1, d2)
-{
-	return decodeTuple(f, [d1, d2]);
-}
-
-function decodeTuple3(f, d1, d2, d3)
-{
-	return decodeTuple(f, [d1, d2, d3]);
-}
-
-function decodeTuple4(f, d1, d2, d3, d4)
-{
-	return decodeTuple(f, [d1, d2, d3, d4]);
-}
-
-function decodeTuple5(f, d1, d2, d3, d4, d5)
-{
-	return decodeTuple(f, [d1, d2, d3, d4, d5]);
-}
-
-function decodeTuple6(f, d1, d2, d3, d4, d5, d6)
-{
-	return decodeTuple(f, [d1, d2, d3, d4, d5, d6]);
-}
-
-function decodeTuple7(f, d1, d2, d3, d4, d5, d6, d7)
-{
-	return decodeTuple(f, [d1, d2, d3, d4, d5, d6, d7]);
-}
-
-function decodeTuple8(f, d1, d2, d3, d4, d5, d6, d7, d8)
-{
-	return decodeTuple(f, [d1, d2, d3, d4, d5, d6, d7, d8]);
+	return mapMany(f, [d1, d2, d3, d4, d5, d6, d7, d8]);
 }
 
 
@@ -5242,6 +5410,11 @@ function badIndex(index, nestedProblems)
 function badField(field, nestedProblems)
 {
 	return { tag: 'field', field: field, rest: nestedProblems };
+}
+
+function badIndex(index, nestedProblems)
+{
+	return { tag: 'index', index: index, rest: nestedProblems };
 }
 
 function badOneOf(problems)
@@ -5273,6 +5446,11 @@ function badToString(problem)
 
 			case 'field':
 				context += '.' + problem.field;
+				problem = problem.rest;
+				break;
+
+			case 'index':
+				context += '[' + problem.index + ']';
 				problem = problem.rest;
 				break;
 
@@ -5421,9 +5599,21 @@ function runHelp(decoder, value)
 			}
 
 			var result = runHelp(decoder.decoder, value[field]);
-			return (result.tag === 'ok')
-				? result
-				: badField(field, result);
+			return (result.tag === 'ok') ? result : badField(field, result);
+
+		case 'index':
+			var index = decoder.index;
+			if (!(value instanceof Array))
+			{
+				return badPrimitive('an array', value);
+			}
+			if (index >= value.length)
+			{
+				return badPrimitive('a longer array. Need index ' + index + ' but there are only ' + value.length + ' entries', value);
+			}
+
+			var result = runHelp(decoder.decoder, value[index]);
+			return (result.tag === 'ok') ? result : badIndex(index, result);
 
 		case 'key-value':
 			if (typeof value !== 'object' || value === null || value instanceof Array)
@@ -5457,40 +5647,6 @@ function runHelp(decoder, value)
 				answer = answer(result.value);
 			}
 			return ok(answer);
-
-		case 'tuple':
-			var decoders = decoder.decoders;
-			var len = decoders.length;
-
-			if ( !(value instanceof Array) || value.length !== len )
-			{
-				return badPrimitive('a Tuple with ' + len + ' entries', value);
-			}
-
-			var answer = decoder.func;
-			for (var i = 0; i < len; i++)
-			{
-				var result = runHelp(decoders[i], value[i]);
-				if (result.tag !== 'ok')
-				{
-					return badIndex(i, result);
-				}
-				answer = answer(result.value);
-			}
-			return ok(answer);
-
-		case 'customAndThen':
-			var result = runHelp(decoder.decoder, value);
-			if (result.tag !== 'ok')
-			{
-				return result;
-			}
-			var realResult = decoder.callback(result.value);
-			if (realResult.ctor === 'Err')
-			{
-				return badPrimitive('something custom', value);
-			}
-			return ok(realResult._0);
 
 		case 'andThen':
 			var result = runHelp(decoder.decoder, value);
@@ -5564,8 +5720,10 @@ function equality(a, b)
 		case 'field':
 			return a.field === b.field && equality(a.decoder, b.decoder);
 
+		case 'index':
+			return a.index === b.index && equality(a.decoder, b.decoder);
+
 		case 'map-many':
-		case 'tuple':
 			if (a.func !== b.func)
 			{
 				return false;
@@ -5573,7 +5731,6 @@ function equality(a, b)
 			return listEquality(a.decoders, b.decoders);
 
 		case 'andThen':
-		case 'customAndThen':
 			return a.callback === b.callback && equality(a.decoder, b.decoder);
 
 		case 'oneOf':
@@ -5633,28 +5790,19 @@ return {
 	decodeContainer: F2(decodeContainer),
 
 	decodeField: F2(decodeField),
+	decodeIndex: F2(decodeIndex),
 
-	decodeObject1: F2(decodeObject1),
-	decodeObject2: F3(decodeObject2),
-	decodeObject3: F4(decodeObject3),
-	decodeObject4: F5(decodeObject4),
-	decodeObject5: F6(decodeObject5),
-	decodeObject6: F7(decodeObject6),
-	decodeObject7: F8(decodeObject7),
-	decodeObject8: F9(decodeObject8),
+	map1: F2(map1),
+	map2: F3(map2),
+	map3: F4(map3),
+	map4: F5(map4),
+	map5: F6(map5),
+	map6: F7(map6),
+	map7: F8(map7),
+	map8: F9(map8),
 	decodeKeyValuePairs: decodeKeyValuePairs,
 
-	decodeTuple1: F2(decodeTuple1),
-	decodeTuple2: F3(decodeTuple2),
-	decodeTuple3: F4(decodeTuple3),
-	decodeTuple4: F5(decodeTuple4),
-	decodeTuple5: F6(decodeTuple5),
-	decodeTuple6: F7(decodeTuple6),
-	decodeTuple7: F8(decodeTuple7),
-	decodeTuple8: F9(decodeTuple8),
-
 	andThen: F2(andThen),
-	customAndThen: F2(customAndThen),
 	fail: fail,
 	succeed: succeed,
 	oneOf: oneOf,
@@ -5681,203 +5829,98 @@ var _elm_lang$core$Json_Encode$string = _elm_lang$core$Native_Json.identity;
 var _elm_lang$core$Json_Encode$encode = _elm_lang$core$Native_Json.encode;
 var _elm_lang$core$Json_Encode$Value = {ctor: 'Value'};
 
-var _elm_lang$core$Json_Decode$tuple8 = _elm_lang$core$Native_Json.decodeTuple8;
-var _elm_lang$core$Json_Decode$tuple7 = _elm_lang$core$Native_Json.decodeTuple7;
-var _elm_lang$core$Json_Decode$tuple6 = _elm_lang$core$Native_Json.decodeTuple6;
-var _elm_lang$core$Json_Decode$tuple5 = _elm_lang$core$Native_Json.decodeTuple5;
-var _elm_lang$core$Json_Decode$tuple4 = _elm_lang$core$Native_Json.decodeTuple4;
-var _elm_lang$core$Json_Decode$tuple3 = _elm_lang$core$Native_Json.decodeTuple3;
-var _elm_lang$core$Json_Decode$tuple2 = _elm_lang$core$Native_Json.decodeTuple2;
-var _elm_lang$core$Json_Decode$tuple1 = _elm_lang$core$Native_Json.decodeTuple1;
-var _elm_lang$core$Json_Decode$succeed = _elm_lang$core$Native_Json.succeed;
-var _elm_lang$core$Json_Decode$fail = _elm_lang$core$Native_Json.fail;
-var _elm_lang$core$Json_Decode$andThen = _elm_lang$core$Native_Json.andThen;
-var _elm_lang$core$Json_Decode$customDecoder = _elm_lang$core$Native_Json.customAndThen;
-var _elm_lang$core$Json_Decode$decodeValue = _elm_lang$core$Native_Json.run;
+var _elm_lang$core$Json_Decode$null = _elm_lang$core$Native_Json.decodeNull;
 var _elm_lang$core$Json_Decode$value = _elm_lang$core$Native_Json.decodePrimitive('value');
+var _elm_lang$core$Json_Decode$andThen = _elm_lang$core$Native_Json.andThen;
+var _elm_lang$core$Json_Decode$fail = _elm_lang$core$Native_Json.fail;
+var _elm_lang$core$Json_Decode$succeed = _elm_lang$core$Native_Json.succeed;
+var _elm_lang$core$Json_Decode$lazy = function (thunk) {
+	return A2(
+		_elm_lang$core$Json_Decode$andThen,
+		thunk,
+		_elm_lang$core$Json_Decode$succeed(
+			{ctor: '_Tuple0'}));
+};
+var _elm_lang$core$Json_Decode$decodeValue = _elm_lang$core$Native_Json.run;
+var _elm_lang$core$Json_Decode$decodeString = _elm_lang$core$Native_Json.runOnString;
+var _elm_lang$core$Json_Decode$map8 = _elm_lang$core$Native_Json.map8;
+var _elm_lang$core$Json_Decode$map7 = _elm_lang$core$Native_Json.map7;
+var _elm_lang$core$Json_Decode$map6 = _elm_lang$core$Native_Json.map6;
+var _elm_lang$core$Json_Decode$map5 = _elm_lang$core$Native_Json.map5;
+var _elm_lang$core$Json_Decode$map4 = _elm_lang$core$Native_Json.map4;
+var _elm_lang$core$Json_Decode$map3 = _elm_lang$core$Native_Json.map3;
+var _elm_lang$core$Json_Decode$map2 = _elm_lang$core$Native_Json.map2;
+var _elm_lang$core$Json_Decode$map = _elm_lang$core$Native_Json.map1;
+var _elm_lang$core$Json_Decode$oneOf = _elm_lang$core$Native_Json.oneOf;
 var _elm_lang$core$Json_Decode$maybe = function (decoder) {
 	return A2(_elm_lang$core$Native_Json.decodeContainer, 'maybe', decoder);
 };
-var _elm_lang$core$Json_Decode$null = _elm_lang$core$Native_Json.decodeNull;
-var _elm_lang$core$Json_Decode$array = function (decoder) {
-	return A2(_elm_lang$core$Native_Json.decodeContainer, 'array', decoder);
-};
-var _elm_lang$core$Json_Decode$list = function (decoder) {
-	return A2(_elm_lang$core$Native_Json.decodeContainer, 'list', decoder);
-};
-var _elm_lang$core$Json_Decode$bool = _elm_lang$core$Native_Json.decodePrimitive('bool');
-var _elm_lang$core$Json_Decode$int = _elm_lang$core$Native_Json.decodePrimitive('int');
-var _elm_lang$core$Json_Decode$float = _elm_lang$core$Native_Json.decodePrimitive('float');
-var _elm_lang$core$Json_Decode$string = _elm_lang$core$Native_Json.decodePrimitive('string');
-var _elm_lang$core$Json_Decode$oneOf = _elm_lang$core$Native_Json.oneOf;
-var _elm_lang$core$Json_Decode$keyValuePairs = _elm_lang$core$Native_Json.decodeKeyValuePairs;
-var _elm_lang$core$Json_Decode$object8 = _elm_lang$core$Native_Json.decodeObject8;
-var _elm_lang$core$Json_Decode$object7 = _elm_lang$core$Native_Json.decodeObject7;
-var _elm_lang$core$Json_Decode$object6 = _elm_lang$core$Native_Json.decodeObject6;
-var _elm_lang$core$Json_Decode$object5 = _elm_lang$core$Native_Json.decodeObject5;
-var _elm_lang$core$Json_Decode$object4 = _elm_lang$core$Native_Json.decodeObject4;
-var _elm_lang$core$Json_Decode$object3 = _elm_lang$core$Native_Json.decodeObject3;
-var _elm_lang$core$Json_Decode$object2 = _elm_lang$core$Native_Json.decodeObject2;
-var _elm_lang$core$Json_Decode$object1 = _elm_lang$core$Native_Json.decodeObject1;
-var _elm_lang$core$Json_Decode_ops = _elm_lang$core$Json_Decode_ops || {};
-_elm_lang$core$Json_Decode_ops[':='] = _elm_lang$core$Native_Json.decodeField;
+var _elm_lang$core$Json_Decode$index = _elm_lang$core$Native_Json.decodeIndex;
+var _elm_lang$core$Json_Decode$field = _elm_lang$core$Native_Json.decodeField;
 var _elm_lang$core$Json_Decode$at = F2(
 	function (fields, decoder) {
-		return A3(
-			_elm_lang$core$List$foldr,
-			F2(
-				function (x, y) {
-					return A2(_elm_lang$core$Json_Decode_ops[':='], x, y);
-				}),
-			decoder,
-			fields);
+		return A3(_elm_lang$core$List$foldr, _elm_lang$core$Json_Decode$field, decoder, fields);
 	});
-var _elm_lang$core$Json_Decode$decodeString = _elm_lang$core$Native_Json.runOnString;
-var _elm_lang$core$Json_Decode$map = _elm_lang$core$Native_Json.decodeObject1;
+var _elm_lang$core$Json_Decode$keyValuePairs = _elm_lang$core$Native_Json.decodeKeyValuePairs;
 var _elm_lang$core$Json_Decode$dict = function (decoder) {
 	return A2(
 		_elm_lang$core$Json_Decode$map,
 		_elm_lang$core$Dict$fromList,
 		_elm_lang$core$Json_Decode$keyValuePairs(decoder));
 };
+var _elm_lang$core$Json_Decode$array = function (decoder) {
+	return A2(_elm_lang$core$Native_Json.decodeContainer, 'array', decoder);
+};
+var _elm_lang$core$Json_Decode$list = function (decoder) {
+	return A2(_elm_lang$core$Native_Json.decodeContainer, 'list', decoder);
+};
+var _elm_lang$core$Json_Decode$nullable = function (decoder) {
+	return _elm_lang$core$Json_Decode$oneOf(
+		{
+			ctor: '::',
+			_0: _elm_lang$core$Json_Decode$null(_elm_lang$core$Maybe$Nothing),
+			_1: {
+				ctor: '::',
+				_0: A2(_elm_lang$core$Json_Decode$map, _elm_lang$core$Maybe$Just, decoder),
+				_1: {ctor: '[]'}
+			}
+		});
+};
+var _elm_lang$core$Json_Decode$float = _elm_lang$core$Native_Json.decodePrimitive('float');
+var _elm_lang$core$Json_Decode$int = _elm_lang$core$Native_Json.decodePrimitive('int');
+var _elm_lang$core$Json_Decode$bool = _elm_lang$core$Native_Json.decodePrimitive('bool');
+var _elm_lang$core$Json_Decode$string = _elm_lang$core$Native_Json.decodePrimitive('string');
 var _elm_lang$core$Json_Decode$Decoder = {ctor: 'Decoder'};
 
-//import Maybe, Native.List //
-
-var _elm_lang$core$Native_Regex = function() {
-
-function escape(str)
-{
-	return str.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-}
-function caseInsensitive(re)
-{
-	return new RegExp(re.source, 'gi');
-}
-function regex(raw)
-{
-	return new RegExp(raw, 'g');
-}
-
-function contains(re, string)
-{
-	return string.match(re) !== null;
-}
-
-function find(n, re, str)
-{
-	n = n.ctor === 'All' ? Infinity : n._0;
-	var out = [];
-	var number = 0;
-	var string = str;
-	var lastIndex = re.lastIndex;
-	var prevLastIndex = -1;
-	var result;
-	while (number++ < n && (result = re.exec(string)))
-	{
-		if (prevLastIndex === re.lastIndex) break;
-		var i = result.length - 1;
-		var subs = new Array(i);
-		while (i > 0)
-		{
-			var submatch = result[i];
-			subs[--i] = submatch === undefined
-				? _elm_lang$core$Maybe$Nothing
-				: _elm_lang$core$Maybe$Just(submatch);
-		}
-		out.push({
-			match: result[0],
-			submatches: _elm_lang$core$Native_List.fromArray(subs),
-			index: result.index,
-			number: number
-		});
-		prevLastIndex = re.lastIndex;
-	}
-	re.lastIndex = lastIndex;
-	return _elm_lang$core$Native_List.fromArray(out);
-}
-
-function replace(n, re, replacer, string)
-{
-	n = n.ctor === 'All' ? Infinity : n._0;
-	var count = 0;
-	function jsReplacer(match)
-	{
-		if (count++ >= n)
-		{
-			return match;
-		}
-		var i = arguments.length - 3;
-		var submatches = new Array(i);
-		while (i > 0)
-		{
-			var submatch = arguments[i];
-			submatches[--i] = submatch === undefined
-				? _elm_lang$core$Maybe$Nothing
-				: _elm_lang$core$Maybe$Just(submatch);
-		}
-		return replacer({
-			match: match,
-			submatches: _elm_lang$core$Native_List.fromArray(submatches),
-			index: arguments[i - 1],
-			number: count
-		});
-	}
-	return string.replace(re, jsReplacer);
-}
-
-function split(n, re, str)
-{
-	n = n.ctor === 'All' ? Infinity : n._0;
-	if (n === Infinity)
-	{
-		return _elm_lang$core$Native_List.fromArray(str.split(re));
-	}
-	var string = str;
-	var result;
-	var out = [];
-	var start = re.lastIndex;
-	while (n--)
-	{
-		if (!(result = re.exec(string))) break;
-		out.push(string.slice(start, result.index));
-		start = re.lastIndex;
-	}
-	out.push(string.slice(start));
-	return _elm_lang$core$Native_List.fromArray(out);
-}
-
-return {
-	regex: regex,
-	caseInsensitive: caseInsensitive,
-	escape: escape,
-
-	contains: F2(contains),
-	find: F3(find),
-	replace: F4(replace),
-	split: F3(split)
-};
-
-}();
-
-var _elm_lang$core$Regex$split = _elm_lang$core$Native_Regex.split;
-var _elm_lang$core$Regex$replace = _elm_lang$core$Native_Regex.replace;
-var _elm_lang$core$Regex$find = _elm_lang$core$Native_Regex.find;
-var _elm_lang$core$Regex$contains = _elm_lang$core$Native_Regex.contains;
-var _elm_lang$core$Regex$caseInsensitive = _elm_lang$core$Native_Regex.caseInsensitive;
-var _elm_lang$core$Regex$regex = _elm_lang$core$Native_Regex.regex;
-var _elm_lang$core$Regex$escape = _elm_lang$core$Native_Regex.escape;
-var _elm_lang$core$Regex$Match = F4(
-	function (a, b, c, d) {
-		return {match: a, submatches: b, index: c, number: d};
+var _elm_lang$core$Tuple$mapSecond = F2(
+	function (func, _p0) {
+		var _p1 = _p0;
+		return {
+			ctor: '_Tuple2',
+			_0: _p1._0,
+			_1: func(_p1._1)
+		};
 	});
-var _elm_lang$core$Regex$Regex = {ctor: 'Regex'};
-var _elm_lang$core$Regex$AtMost = function (a) {
-	return {ctor: 'AtMost', _0: a};
+var _elm_lang$core$Tuple$mapFirst = F2(
+	function (func, _p2) {
+		var _p3 = _p2;
+		return {
+			ctor: '_Tuple2',
+			_0: func(_p3._0),
+			_1: _p3._1
+		};
+	});
+var _elm_lang$core$Tuple$second = function (_p4) {
+	var _p5 = _p4;
+	return _p5._1;
 };
-var _elm_lang$core$Regex$All = {ctor: 'All'};
+var _elm_lang$core$Tuple$first = function (_p6) {
+	var _p7 = _p6;
+	return _p7._0;
+};
 
-//import Native.Json //
+var _elm_lang$virtual_dom$VirtualDom_Debug$wrap;
+var _elm_lang$virtual_dom$VirtualDom_Debug$wrapWithFlags;
 
 var _elm_lang$virtual_dom$Native_VirtualDom = function() {
 
@@ -5886,6 +5929,7 @@ var EVENT_KEY = 'EVENT';
 var ATTR_KEY = 'ATTR';
 var ATTR_NS_KEY = 'ATTR_NS';
 
+var localDoc = typeof document !== 'undefined' ? document : {};
 
 
 ////////////  VIRTUAL DOM NODES  ////////////
@@ -6056,7 +6100,14 @@ function organizeFacts(factList)
 		{
 			namespace = entry.value;
 		}
-		else
+		else if (key === 'className')
+		{
+			var classes = facts[key];
+			facts[key] = typeof classes === 'undefined'
+				? entry.value
+				: classes + ' ' + entry.value;
+		}
+ 		else
 		{
 			facts[key] = entry.value;
 		}
@@ -6141,66 +6192,18 @@ function equalEvents(a, b)
 }
 
 
-
-////////////  RENDERER  ////////////
-
-
-function renderer(parent, tagger, initialVirtualNode)
+function mapProperty(func, property)
 {
-	var eventNode = { tagger: tagger, parent: undefined };
-
-	var domNode = render(initialVirtualNode, eventNode);
-	parent.appendChild(domNode);
-
-	var state = 'NO_REQUEST';
-	var currentVirtualNode = initialVirtualNode;
-	var nextVirtualNode = initialVirtualNode;
-
-	function registerVirtualNode(vNode)
+	if (property.key !== EVENT_KEY)
 	{
-		if (state === 'NO_REQUEST')
-		{
-			rAF(updateIfNeeded);
-		}
-		state = 'PENDING_REQUEST';
-		nextVirtualNode = vNode;
+		return property;
 	}
-
-	function updateIfNeeded()
-	{
-		switch (state)
-		{
-			case 'NO_REQUEST':
-				throw new Error(
-					'Unexpected draw callback.\n' +
-					'Please report this to <https://github.com/elm-lang/core/issues>.'
-				);
-
-			case 'PENDING_REQUEST':
-				rAF(updateIfNeeded);
-				state = 'EXTRA_REQUEST';
-
-				var patches = diff(currentVirtualNode, nextVirtualNode);
-				domNode = applyPatches(domNode, currentVirtualNode, patches, eventNode);
-				currentVirtualNode = nextVirtualNode;
-
-				return;
-
-			case 'EXTRA_REQUEST':
-				state = 'NO_REQUEST';
-				return;
-		}
-	}
-
-	return { update: registerVirtualNode };
+	return on(
+		property.realKey,
+		property.value.options,
+		A2(_elm_lang$core$Json_Decode$map, func, property.value.decoder)
+	);
 }
-
-
-var rAF =
-	typeof requestAnimationFrame !== 'undefined'
-		? requestAnimationFrame
-		: function(cb) { setTimeout(cb, 1000 / 60); };
-
 
 
 ////////////  RENDER  ////////////
@@ -6230,22 +6233,18 @@ function render(vNode, eventNode)
 				subNode = subNode.node;
 			}
 
-			var subEventRoot = {
-				tagger: tagger,
-				parent: eventNode
-			};
-
+			var subEventRoot = { tagger: tagger, parent: eventNode };
 			var domNode = render(subNode, subEventRoot);
 			domNode.elm_event_node_ref = subEventRoot;
 			return domNode;
 
 		case 'text':
-			return document.createTextNode(vNode.text);
+			return localDoc.createTextNode(vNode.text);
 
 		case 'node':
 			var domNode = vNode.namespace
-				? document.createElementNS(vNode.namespace, vNode.tag)
-				: document.createElement(vNode.tag);
+				? localDoc.createElementNS(vNode.namespace, vNode.tag)
+				: localDoc.createElement(vNode.tag);
 
 			applyFacts(domNode, eventNode, vNode.facts);
 
@@ -6260,8 +6259,8 @@ function render(vNode, eventNode)
 
 		case 'keyed-node':
 			var domNode = vNode.namespace
-				? document.createElementNS(vNode.namespace, vNode.tag)
-				: document.createElement(vNode.tag);
+				? localDoc.createElementNS(vNode.namespace, vNode.tag)
+				: localDoc.createElement(vNode.tag);
 
 			applyFacts(domNode, eventNode, vNode.facts);
 
@@ -7168,7 +7167,7 @@ function applyPatch(domNode, patch)
 	switch (patch.type)
 	{
 		case 'p-redraw':
-			return redraw(domNode, patch.data, patch.eventNode);
+			return applyPatchRedraw(domNode, patch.data, patch.eventNode);
 
 		case 'p-facts':
 			applyFacts(domNode, patch.eventNode, patch.data);
@@ -7182,7 +7181,14 @@ function applyPatch(domNode, patch)
 			return applyPatchesHelp(domNode, patch.data);
 
 		case 'p-tagger':
-			domNode.elm_event_node_ref.tagger = patch.data;
+			if (typeof domNode.elm_event_node_ref !== 'undefined')
+			{
+				domNode.elm_event_node_ref.tagger = patch.data;
+			}
+			else
+			{
+				domNode.elm_event_node_ref = { tagger: patch.data, parent: patch.eventNode };
+			}
 			return domNode;
 
 		case 'p-remove-last':
@@ -7217,57 +7223,7 @@ function applyPatch(domNode, patch)
 			return domNode;
 
 		case 'p-reorder':
-			var data = patch.data;
-
-			// end inserts
-			var endInserts = data.endInserts;
-			var end;
-			if (typeof endInserts !== 'undefined')
-			{
-				if (endInserts.length === 1)
-				{
-					var insert = endInserts[0];
-					var entry = insert.entry;
-					var end = entry.tag === 'move'
-						? entry.data
-						: render(entry.vnode, patch.eventNode);
-				}
-				else
-				{
-					end = document.createDocumentFragment();
-					for (var i = 0; i < endInserts.length; i++)
-					{
-						var insert = endInserts[i];
-						var entry = insert.entry;
-						var node = entry.tag === 'move'
-							? entry.data
-							: render(entry.vnode, patch.eventNode);
-						end.appendChild(node);
-					}
-				}
-			}
-
-			// removals
-			domNode = applyPatchesHelp(domNode, data.patches);
-
-			// inserts
-			var inserts = data.inserts;
-			for (var i = 0; i < inserts.length; i++)
-			{
-				var insert = inserts[i];
-				var entry = insert.entry;
-				var node = entry.tag === 'move'
-					? entry.data
-					: render(entry.vnode, patch.eventNode);
-				domNode.insertBefore(node, domNode.childNodes[insert.index]);
-			}
-
-			if (typeof end !== 'undefined')
-			{
-				domNode.appendChild(end);
-			}
-
-			return domNode;
+			return applyPatchReorder(domNode, patch);
 
 		case 'p-custom':
 			var impl = patch.data;
@@ -7279,7 +7235,7 @@ function applyPatch(domNode, patch)
 }
 
 
-function redraw(domNode, vNode, eventNode)
+function applyPatchRedraw(domNode, vNode, eventNode)
 {
 	var parentNode = domNode.parentNode;
 	var newNode = render(vNode, eventNode);
@@ -7297,28 +7253,533 @@ function redraw(domNode, vNode, eventNode)
 }
 
 
-
-////////////  PROGRAMS  ////////////
-
-
-function programWithFlags(details)
+function applyPatchReorder(domNode, patch)
 {
-	return {
-		init: details.init,
-		update: details.update,
-		subscriptions: details.subscriptions,
-		view: details.view,
-		renderer: renderer
+	var data = patch.data;
+
+	// remove end inserts
+	var frag = applyPatchReorderEndInsertsHelp(data.endInserts, patch);
+
+	// removals
+	domNode = applyPatchesHelp(domNode, data.patches);
+
+	// inserts
+	var inserts = data.inserts;
+	for (var i = 0; i < inserts.length; i++)
+	{
+		var insert = inserts[i];
+		var entry = insert.entry;
+		var node = entry.tag === 'move'
+			? entry.data
+			: render(entry.vnode, patch.eventNode);
+		domNode.insertBefore(node, domNode.childNodes[insert.index]);
+	}
+
+	// add end inserts
+	if (typeof frag !== 'undefined')
+	{
+		domNode.appendChild(frag);
+	}
+
+	return domNode;
+}
+
+
+function applyPatchReorderEndInsertsHelp(endInserts, patch)
+{
+	if (typeof endInserts === 'undefined')
+	{
+		return;
+	}
+
+	var frag = localDoc.createDocumentFragment();
+	for (var i = 0; i < endInserts.length; i++)
+	{
+		var insert = endInserts[i];
+		var entry = insert.entry;
+		frag.appendChild(entry.tag === 'move'
+			? entry.data
+			: render(entry.vnode, patch.eventNode)
+		);
+	}
+	return frag;
+}
+
+
+// PROGRAMS
+
+var program = makeProgram(checkNoFlags);
+var programWithFlags = makeProgram(checkYesFlags);
+
+function makeProgram(flagChecker)
+{
+	return F2(function(debugWrap, impl)
+	{
+		return function(flagDecoder)
+		{
+			return function(object, moduleName, debugMetadata)
+			{
+				var checker = flagChecker(flagDecoder, moduleName);
+				if (typeof debugMetadata === 'undefined')
+				{
+					normalSetup(impl, object, moduleName, checker);
+				}
+				else
+				{
+					debugSetup(A2(debugWrap, debugMetadata, impl), object, moduleName, checker);
+				}
+			};
+		};
+	});
+}
+
+function staticProgram(vNode)
+{
+	var nothing = _elm_lang$core$Native_Utils.Tuple2(
+		_elm_lang$core$Native_Utils.Tuple0,
+		_elm_lang$core$Platform_Cmd$none
+	);
+	return A2(program, _elm_lang$virtual_dom$VirtualDom_Debug$wrap, {
+		init: nothing,
+		view: function() { return vNode; },
+		update: F2(function() { return nothing; }),
+		subscriptions: function() { return _elm_lang$core$Platform_Sub$none; }
+	})();
+}
+
+
+// FLAG CHECKERS
+
+function checkNoFlags(flagDecoder, moduleName)
+{
+	return function(init, flags, domNode)
+	{
+		if (typeof flags === 'undefined')
+		{
+			return init;
+		}
+
+		var errorMessage =
+			'The `' + moduleName + '` module does not need flags.\n'
+			+ 'Initialize it with no arguments and you should be all set!';
+
+		crash(errorMessage, domNode);
 	};
 }
+
+function checkYesFlags(flagDecoder, moduleName)
+{
+	return function(init, flags, domNode)
+	{
+		if (typeof flagDecoder === 'undefined')
+		{
+			var errorMessage =
+				'Are you trying to sneak a Never value into Elm? Trickster!\n'
+				+ 'It looks like ' + moduleName + '.main is defined with `programWithFlags` but has type `Program Never`.\n'
+				+ 'Use `program` instead if you do not want flags.'
+
+			crash(errorMessage, domNode);
+		}
+
+		var result = A2(_elm_lang$core$Native_Json.run, flagDecoder, flags);
+		if (result.ctor === 'Ok')
+		{
+			return init(result._0);
+		}
+
+		var errorMessage =
+			'Trying to initialize the `' + moduleName + '` module with an unexpected flag.\n'
+			+ 'I tried to convert it to an Elm value, but ran into this problem:\n\n'
+			+ result._0;
+
+		crash(errorMessage, domNode);
+	};
+}
+
+function crash(errorMessage, domNode)
+{
+	if (domNode)
+	{
+		domNode.innerHTML =
+			'<div style="padding-left:1em;">'
+			+ '<h2 style="font-weight:normal;"><b>Oops!</b> Something went wrong when starting your Elm program.</h2>'
+			+ '<pre style="padding-left:1em;">' + errorMessage + '</pre>'
+			+ '</div>';
+	}
+
+	throw new Error(errorMessage);
+}
+
+
+//  NORMAL SETUP
+
+function normalSetup(impl, object, moduleName, flagChecker)
+{
+	object['embed'] = function embed(node, flags)
+	{
+		while (node.lastChild)
+		{
+			node.removeChild(node.lastChild);
+		}
+
+		return _elm_lang$core$Native_Platform.initialize(
+			flagChecker(impl.init, flags, node),
+			impl.update,
+			impl.subscriptions,
+			normalRenderer(node, impl.view)
+		);
+	};
+
+	object['fullscreen'] = function fullscreen(flags)
+	{
+		return _elm_lang$core$Native_Platform.initialize(
+			flagChecker(impl.init, flags, document.body),
+			impl.update,
+			impl.subscriptions,
+			normalRenderer(document.body, impl.view)
+		);
+	};
+}
+
+function normalRenderer(parentNode, view)
+{
+	return function(tagger, initialModel)
+	{
+		var eventNode = { tagger: tagger, parent: undefined };
+		var initialVirtualNode = view(initialModel);
+		var domNode = render(initialVirtualNode, eventNode);
+		parentNode.appendChild(domNode);
+		return makeStepper(domNode, view, initialVirtualNode, eventNode);
+	};
+}
+
+
+// STEPPER
+
+var rAF =
+	typeof requestAnimationFrame !== 'undefined'
+		? requestAnimationFrame
+		: function(callback) { callback(); };
+
+function makeStepper(domNode, view, initialVirtualNode, eventNode)
+{
+	var state = 'NO_REQUEST';
+	var currNode = initialVirtualNode;
+	var nextModel;
+
+	function updateIfNeeded()
+	{
+		switch (state)
+		{
+			case 'NO_REQUEST':
+				throw new Error(
+					'Unexpected draw callback.\n' +
+					'Please report this to <https://github.com/elm-lang/virtual-dom/issues>.'
+				);
+
+			case 'PENDING_REQUEST':
+				rAF(updateIfNeeded);
+				state = 'EXTRA_REQUEST';
+
+				var nextNode = view(nextModel);
+				var patches = diff(currNode, nextNode);
+				domNode = applyPatches(domNode, currNode, patches, eventNode);
+				currNode = nextNode;
+
+				return;
+
+			case 'EXTRA_REQUEST':
+				state = 'NO_REQUEST';
+				return;
+		}
+	}
+
+	return function stepper(model)
+	{
+		if (state === 'NO_REQUEST')
+		{
+			rAF(updateIfNeeded);
+		}
+		state = 'PENDING_REQUEST';
+		nextModel = model;
+	};
+}
+
+
+// DEBUG SETUP
+
+function debugSetup(impl, object, moduleName, flagChecker)
+{
+	object['fullscreen'] = function fullscreen(flags)
+	{
+		var popoutRef = { doc: undefined };
+		return _elm_lang$core$Native_Platform.initialize(
+			flagChecker(impl.init, flags, document.body),
+			impl.update(scrollTask(popoutRef)),
+			impl.subscriptions,
+			debugRenderer(moduleName, document.body, popoutRef, impl.view, impl.viewIn, impl.viewOut)
+		);
+	};
+
+	object['embed'] = function fullscreen(node, flags)
+	{
+		var popoutRef = { doc: undefined };
+		return _elm_lang$core$Native_Platform.initialize(
+			flagChecker(impl.init, flags, node),
+			impl.update(scrollTask(popoutRef)),
+			impl.subscriptions,
+			debugRenderer(moduleName, node, popoutRef, impl.view, impl.viewIn, impl.viewOut)
+		);
+	};
+}
+
+function scrollTask(popoutRef)
+{
+	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
+	{
+		var doc = popoutRef.doc;
+		if (doc)
+		{
+			var msgs = doc.getElementsByClassName('debugger-sidebar-messages')[0];
+			if (msgs)
+			{
+				msgs.scrollTop = msgs.scrollHeight;
+			}
+		}
+		callback(_elm_lang$core$Native_Scheduler.succeed(_elm_lang$core$Native_Utils.Tuple0));
+	});
+}
+
+
+function debugRenderer(moduleName, parentNode, popoutRef, view, viewIn, viewOut)
+{
+	return function(tagger, initialModel)
+	{
+		var appEventNode = { tagger: tagger, parent: undefined };
+		var eventNode = { tagger: tagger, parent: undefined };
+
+		// make normal stepper
+		var appVirtualNode = view(initialModel);
+		var appNode = render(appVirtualNode, appEventNode);
+		parentNode.appendChild(appNode);
+		var appStepper = makeStepper(appNode, view, appVirtualNode, appEventNode);
+
+		// make overlay stepper
+		var overVirtualNode = viewIn(initialModel)._1;
+		var overNode = render(overVirtualNode, eventNode);
+		parentNode.appendChild(overNode);
+		var wrappedViewIn = wrapViewIn(appEventNode, overNode, viewIn);
+		var overStepper = makeStepper(overNode, wrappedViewIn, overVirtualNode, eventNode);
+
+		// make debugger stepper
+		var debugStepper = makeDebugStepper(initialModel, viewOut, eventNode, parentNode, moduleName, popoutRef);
+
+		return function stepper(model)
+		{
+			appStepper(model);
+			overStepper(model);
+			debugStepper(model);
+		}
+	};
+}
+
+function makeDebugStepper(initialModel, view, eventNode, parentNode, moduleName, popoutRef)
+{
+	var curr;
+	var domNode;
+
+	return function stepper(model)
+	{
+		if (!model.isDebuggerOpen)
+		{
+			return;
+		}
+
+		if (!popoutRef.doc)
+		{
+			curr = view(model);
+			domNode = openDebugWindow(moduleName, popoutRef, curr, eventNode);
+			return;
+		}
+
+		// switch to document of popout
+		localDoc = popoutRef.doc;
+
+		var next = view(model);
+		var patches = diff(curr, next);
+		domNode = applyPatches(domNode, curr, patches, eventNode);
+		curr = next;
+
+		// switch back to normal document
+		localDoc = document;
+	};
+}
+
+function openDebugWindow(moduleName, popoutRef, virtualNode, eventNode)
+{
+	var w = 900;
+	var h = 360;
+	var x = screen.width - w;
+	var y = screen.height - h;
+	var debugWindow = window.open('', '', 'width=' + w + ',height=' + h + ',left=' + x + ',top=' + y);
+
+	// switch to window document
+	localDoc = debugWindow.document;
+
+	popoutRef.doc = localDoc;
+	localDoc.title = 'Debugger - ' + moduleName;
+	localDoc.body.style.margin = '0';
+	localDoc.body.style.padding = '0';
+	var domNode = render(virtualNode, eventNode);
+	localDoc.body.appendChild(domNode);
+
+	localDoc.addEventListener('keydown', function(event) {
+		if (event.metaKey && event.which === 82)
+		{
+			window.location.reload();
+		}
+		if (event.which === 38)
+		{
+			eventNode.tagger({ ctor: 'Up' });
+			event.preventDefault();
+		}
+		if (event.which === 40)
+		{
+			eventNode.tagger({ ctor: 'Down' });
+			event.preventDefault();
+		}
+	});
+
+	function close()
+	{
+		popoutRef.doc = undefined;
+		debugWindow.close();
+	}
+	window.addEventListener('unload', close);
+	debugWindow.addEventListener('unload', function() {
+		popoutRef.doc = undefined;
+		window.removeEventListener('unload', close);
+		eventNode.tagger({ ctor: 'Close' });
+	});
+
+	// switch back to the normal document
+	localDoc = document;
+
+	return domNode;
+}
+
+
+// BLOCK EVENTS
+
+function wrapViewIn(appEventNode, overlayNode, viewIn)
+{
+	var ignorer = makeIgnorer(overlayNode);
+	var blocking = 'Normal';
+	var overflow;
+
+	var normalTagger = appEventNode.tagger;
+	var blockTagger = function() {};
+
+	return function(model)
+	{
+		var tuple = viewIn(model);
+		var newBlocking = tuple._0.ctor;
+		appEventNode.tagger = newBlocking === 'Normal' ? normalTagger : blockTagger;
+		if (blocking !== newBlocking)
+		{
+			traverse('removeEventListener', ignorer, blocking);
+			traverse('addEventListener', ignorer, newBlocking);
+
+			if (blocking === 'Normal')
+			{
+				overflow = document.body.style.overflow;
+				document.body.style.overflow = 'hidden';
+			}
+
+			if (newBlocking === 'Normal')
+			{
+				document.body.style.overflow = overflow;
+			}
+
+			blocking = newBlocking;
+		}
+		return tuple._1;
+	}
+}
+
+function traverse(verbEventListener, ignorer, blocking)
+{
+	switch(blocking)
+	{
+		case 'Normal':
+			return;
+
+		case 'Pause':
+			return traverseHelp(verbEventListener, ignorer, mostEvents);
+
+		case 'Message':
+			return traverseHelp(verbEventListener, ignorer, allEvents);
+	}
+}
+
+function traverseHelp(verbEventListener, handler, eventNames)
+{
+	for (var i = 0; i < eventNames.length; i++)
+	{
+		document.body[verbEventListener](eventNames[i], handler, true);
+	}
+}
+
+function makeIgnorer(overlayNode)
+{
+	return function(event)
+	{
+		if (event.type === 'keydown' && event.metaKey && event.which === 82)
+		{
+			return;
+		}
+
+		var isScroll = event.type === 'scroll' || event.type === 'wheel';
+
+		var node = event.target;
+		while (node !== null)
+		{
+			if (node.className === 'elm-overlay-message-details' && isScroll)
+			{
+				return;
+			}
+
+			if (node === overlayNode && !isScroll)
+			{
+				return;
+			}
+			node = node.parentNode;
+		}
+
+		event.stopPropagation();
+		event.preventDefault();
+	}
+}
+
+var mostEvents = [
+	'click', 'dblclick', 'mousemove',
+	'mouseup', 'mousedown', 'mouseenter', 'mouseleave',
+	'touchstart', 'touchend', 'touchcancel', 'touchmove',
+	'pointerdown', 'pointerup', 'pointerover', 'pointerout',
+	'pointerenter', 'pointerleave', 'pointermove', 'pointercancel',
+	'dragstart', 'drag', 'dragend', 'dragenter', 'dragover', 'dragleave', 'drop',
+	'keyup', 'keydown', 'keypress',
+	'input', 'change',
+	'focus', 'blur'
+];
+
+var allEvents = mostEvents.concat('wheel', 'scroll');
 
 
 return {
 	node: node,
 	text: text,
-
 	custom: custom,
-
 	map: F2(map),
 
 	on: F3(on),
@@ -7326,17 +7787,26 @@ return {
 	property: F2(property),
 	attribute: F2(attribute),
 	attributeNS: F3(attributeNS),
+	mapProperty: F2(mapProperty),
 
 	lazy: F2(lazy),
 	lazy2: F3(lazy2),
 	lazy3: F4(lazy3),
 	keyedNode: F3(keyedNode),
 
-	programWithFlags: programWithFlags
+	program: program,
+	programWithFlags: programWithFlags,
+	staticProgram: staticProgram
 };
 
 }();
-var _elm_lang$virtual_dom$VirtualDom$programWithFlags = _elm_lang$virtual_dom$Native_VirtualDom.programWithFlags;
+
+var _elm_lang$virtual_dom$VirtualDom$programWithFlags = function (impl) {
+	return A2(_elm_lang$virtual_dom$Native_VirtualDom.programWithFlags, _elm_lang$virtual_dom$VirtualDom_Debug$wrapWithFlags, impl);
+};
+var _elm_lang$virtual_dom$VirtualDom$program = function (impl) {
+	return A2(_elm_lang$virtual_dom$Native_VirtualDom.program, _elm_lang$virtual_dom$VirtualDom_Debug$wrap, impl);
+};
 var _elm_lang$virtual_dom$VirtualDom$keyedNode = _elm_lang$virtual_dom$Native_VirtualDom.keyedNode;
 var _elm_lang$virtual_dom$VirtualDom$lazy3 = _elm_lang$virtual_dom$Native_VirtualDom.lazy3;
 var _elm_lang$virtual_dom$VirtualDom$lazy2 = _elm_lang$virtual_dom$Native_VirtualDom.lazy2;
@@ -7348,6 +7818,7 @@ var _elm_lang$virtual_dom$VirtualDom$on = F2(
 		return A3(_elm_lang$virtual_dom$VirtualDom$onWithOptions, eventName, _elm_lang$virtual_dom$VirtualDom$defaultOptions, decoder);
 	});
 var _elm_lang$virtual_dom$VirtualDom$style = _elm_lang$virtual_dom$Native_VirtualDom.style;
+var _elm_lang$virtual_dom$VirtualDom$mapProperty = _elm_lang$virtual_dom$Native_VirtualDom.mapProperty;
 var _elm_lang$virtual_dom$VirtualDom$attributeNS = _elm_lang$virtual_dom$Native_VirtualDom.attributeNS;
 var _elm_lang$virtual_dom$VirtualDom$attribute = _elm_lang$virtual_dom$Native_VirtualDom.attribute;
 var _elm_lang$virtual_dom$VirtualDom$property = _elm_lang$virtual_dom$Native_VirtualDom.property;
@@ -7361,6 +7832,30 @@ var _elm_lang$virtual_dom$VirtualDom$Options = F2(
 var _elm_lang$virtual_dom$VirtualDom$Node = {ctor: 'Node'};
 var _elm_lang$virtual_dom$VirtualDom$Property = {ctor: 'Property'};
 
+var _elm_lang$html$Html$programWithFlags = _elm_lang$virtual_dom$VirtualDom$programWithFlags;
+var _elm_lang$html$Html$program = _elm_lang$virtual_dom$VirtualDom$program;
+var _elm_lang$html$Html$beginnerProgram = function (_p0) {
+	var _p1 = _p0;
+	return _elm_lang$html$Html$program(
+		{
+			init: A2(
+				_elm_lang$core$Platform_Cmd_ops['!'],
+				_p1.model,
+				{ctor: '[]'}),
+			update: F2(
+				function (msg, model) {
+					return A2(
+						_elm_lang$core$Platform_Cmd_ops['!'],
+						A2(_p1.update, msg, model),
+						{ctor: '[]'});
+				}),
+			view: _p1.view,
+			subscriptions: function (_p2) {
+				return _elm_lang$core$Platform_Sub$none;
+			}
+		});
+};
+var _elm_lang$html$Html$map = _elm_lang$virtual_dom$VirtualDom$map;
 var _elm_lang$html$Html$text = _elm_lang$virtual_dom$VirtualDom$text;
 var _elm_lang$html$Html$node = _elm_lang$virtual_dom$VirtualDom$node;
 var _elm_lang$html$Html$body = _elm_lang$html$Html$node('body');
@@ -7377,7 +7872,7 @@ var _elm_lang$html$Html$h6 = _elm_lang$html$Html$node('h6');
 var _elm_lang$html$Html$header = _elm_lang$html$Html$node('header');
 var _elm_lang$html$Html$footer = _elm_lang$html$Html$node('footer');
 var _elm_lang$html$Html$address = _elm_lang$html$Html$node('address');
-var _elm_lang$html$Html$main$ = _elm_lang$html$Html$node('main');
+var _elm_lang$html$Html$main_ = _elm_lang$html$Html$node('main');
 var _elm_lang$html$Html$p = _elm_lang$html$Html$node('p');
 var _elm_lang$html$Html$hr = _elm_lang$html$Html$node('hr');
 var _elm_lang$html$Html$pre = _elm_lang$html$Html$node('pre');
@@ -7431,7 +7926,6 @@ var _elm_lang$html$Html$audio = _elm_lang$html$Html$node('audio');
 var _elm_lang$html$Html$source = _elm_lang$html$Html$node('source');
 var _elm_lang$html$Html$track = _elm_lang$html$Html$node('track');
 var _elm_lang$html$Html$canvas = _elm_lang$html$Html$node('canvas');
-var _elm_lang$html$Html$svg = _elm_lang$html$Html$node('svg');
 var _elm_lang$html$Html$math = _elm_lang$html$Html$node('math');
 var _elm_lang$html$Html$table = _elm_lang$html$Html$node('table');
 var _elm_lang$html$Html$caption = _elm_lang$html$Html$node('caption');
@@ -7463,44 +7957,7 @@ var _elm_lang$html$Html$summary = _elm_lang$html$Html$node('summary');
 var _elm_lang$html$Html$menuitem = _elm_lang$html$Html$node('menuitem');
 var _elm_lang$html$Html$menu = _elm_lang$html$Html$node('menu');
 
-var _elm_lang$html$Html_App$programWithFlags = _elm_lang$virtual_dom$VirtualDom$programWithFlags;
-var _elm_lang$html$Html_App$program = function (app) {
-	return _elm_lang$html$Html_App$programWithFlags(
-		_elm_lang$core$Native_Utils.update(
-			app,
-			{
-				init: function (_p0) {
-					return app.init;
-				}
-			}));
-};
-var _elm_lang$html$Html_App$beginnerProgram = function (_p1) {
-	var _p2 = _p1;
-	return _elm_lang$html$Html_App$programWithFlags(
-		{
-			init: function (_p3) {
-				return A2(
-					_elm_lang$core$Platform_Cmd_ops['!'],
-					_p2.model,
-					_elm_lang$core$Native_List.fromArray(
-						[]));
-			},
-			update: F2(
-				function (msg, model) {
-					return A2(
-						_elm_lang$core$Platform_Cmd_ops['!'],
-						A2(_p2.update, msg, model),
-						_elm_lang$core$Native_List.fromArray(
-							[]));
-				}),
-			view: _p2.view,
-			subscriptions: function (_p4) {
-				return _elm_lang$core$Platform_Sub$none;
-			}
-		});
-};
-var _elm_lang$html$Html_App$map = _elm_lang$virtual_dom$VirtualDom$map;
-
+var _elm_lang$html$Html_Attributes$map = _elm_lang$virtual_dom$VirtualDom$mapProperty;
 var _elm_lang$html$Html_Attributes$attribute = _elm_lang$virtual_dom$VirtualDom$attribute;
 var _elm_lang$html$Html_Attributes$contextmenu = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$attribute, 'contextmenu', value);
@@ -7508,14 +7965,77 @@ var _elm_lang$html$Html_Attributes$contextmenu = function (value) {
 var _elm_lang$html$Html_Attributes$draggable = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$attribute, 'draggable', value);
 };
+var _elm_lang$html$Html_Attributes$itemprop = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'itemprop', value);
+};
+var _elm_lang$html$Html_Attributes$tabindex = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'tabIndex',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$charset = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'charset', value);
+};
+var _elm_lang$html$Html_Attributes$height = function (value) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'height',
+		_elm_lang$core$Basics$toString(value));
+};
+var _elm_lang$html$Html_Attributes$width = function (value) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'width',
+		_elm_lang$core$Basics$toString(value));
+};
+var _elm_lang$html$Html_Attributes$formaction = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'formAction', value);
+};
 var _elm_lang$html$Html_Attributes$list = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$attribute, 'list', value);
+};
+var _elm_lang$html$Html_Attributes$minlength = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'minLength',
+		_elm_lang$core$Basics$toString(n));
 };
 var _elm_lang$html$Html_Attributes$maxlength = function (n) {
 	return A2(
 		_elm_lang$html$Html_Attributes$attribute,
 		'maxlength',
 		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$size = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'size',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$form = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'form', value);
+};
+var _elm_lang$html$Html_Attributes$cols = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'cols',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$rows = function (n) {
+	return A2(
+		_elm_lang$html$Html_Attributes$attribute,
+		'rows',
+		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$challenge = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'challenge', value);
+};
+var _elm_lang$html$Html_Attributes$media = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'media', value);
+};
+var _elm_lang$html$Html_Attributes$rel = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'rel', value);
 };
 var _elm_lang$html$Html_Attributes$datetime = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$attribute, 'datetime', value);
@@ -7534,6 +8054,9 @@ var _elm_lang$html$Html_Attributes$rowspan = function (n) {
 		_elm_lang$html$Html_Attributes$attribute,
 		'rowspan',
 		_elm_lang$core$Basics$toString(n));
+};
+var _elm_lang$html$Html_Attributes$manifest = function (value) {
+	return A2(_elm_lang$html$Html_Attributes$attribute, 'manifest', value);
 };
 var _elm_lang$html$Html_Attributes$property = _elm_lang$virtual_dom$VirtualDom$property;
 var _elm_lang$html$Html_Attributes$stringProperty = F2(
@@ -7564,20 +8087,8 @@ var _elm_lang$html$Html_Attributes$dir = function (value) {
 var _elm_lang$html$Html_Attributes$dropzone = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'dropzone', value);
 };
-var _elm_lang$html$Html_Attributes$itemprop = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'itemprop', value);
-};
 var _elm_lang$html$Html_Attributes$lang = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'lang', value);
-};
-var _elm_lang$html$Html_Attributes$tabindex = function (n) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'tabIndex',
-		_elm_lang$core$Basics$toString(n));
-};
-var _elm_lang$html$Html_Attributes$charset = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'charset', value);
 };
 var _elm_lang$html$Html_Attributes$content = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'content', value);
@@ -7590,18 +8101,6 @@ var _elm_lang$html$Html_Attributes$language = function (value) {
 };
 var _elm_lang$html$Html_Attributes$src = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'src', value);
-};
-var _elm_lang$html$Html_Attributes$height = function (value) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'height',
-		_elm_lang$core$Basics$toString(value));
-};
-var _elm_lang$html$Html_Attributes$width = function (value) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'width',
-		_elm_lang$core$Basics$toString(value));
 };
 var _elm_lang$html$Html_Attributes$alt = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'alt', value);
@@ -7624,7 +8123,7 @@ var _elm_lang$html$Html_Attributes$sandbox = function (value) {
 var _elm_lang$html$Html_Attributes$srcdoc = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'srcdoc', value);
 };
-var _elm_lang$html$Html_Attributes$type$ = function (value) {
+var _elm_lang$html$Html_Attributes$type_ = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'type', value);
 };
 var _elm_lang$html$Html_Attributes$value = function (value) {
@@ -7651,20 +8150,8 @@ var _elm_lang$html$Html_Attributes$autocomplete = function (bool) {
 		'autocomplete',
 		bool ? 'on' : 'off');
 };
-var _elm_lang$html$Html_Attributes$autosave = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'autosave', value);
-};
 var _elm_lang$html$Html_Attributes$enctype = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'enctype', value);
-};
-var _elm_lang$html$Html_Attributes$formaction = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'formAction', value);
-};
-var _elm_lang$html$Html_Attributes$minlength = function (n) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'minLength',
-		_elm_lang$core$Basics$toString(n));
 };
 var _elm_lang$html$Html_Attributes$method = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'method', value);
@@ -7675,17 +8162,8 @@ var _elm_lang$html$Html_Attributes$name = function (value) {
 var _elm_lang$html$Html_Attributes$pattern = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'pattern', value);
 };
-var _elm_lang$html$Html_Attributes$size = function (n) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'size',
-		_elm_lang$core$Basics$toString(n));
-};
 var _elm_lang$html$Html_Attributes$for = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'htmlFor', value);
-};
-var _elm_lang$html$Html_Attributes$form = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'form', value);
 };
 var _elm_lang$html$Html_Attributes$max = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'max', value);
@@ -7695,18 +8173,6 @@ var _elm_lang$html$Html_Attributes$min = function (value) {
 };
 var _elm_lang$html$Html_Attributes$step = function (n) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'step', n);
-};
-var _elm_lang$html$Html_Attributes$cols = function (n) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'cols',
-		_elm_lang$core$Basics$toString(n));
-};
-var _elm_lang$html$Html_Attributes$rows = function (n) {
-	return A2(
-		_elm_lang$html$Html_Attributes$stringProperty,
-		'rows',
-		_elm_lang$core$Basics$toString(n));
 };
 var _elm_lang$html$Html_Attributes$wrap = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'wrap', value);
@@ -7719,9 +8185,6 @@ var _elm_lang$html$Html_Attributes$shape = function (value) {
 };
 var _elm_lang$html$Html_Attributes$coords = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'coords', value);
-};
-var _elm_lang$html$Html_Attributes$challenge = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'challenge', value);
 };
 var _elm_lang$html$Html_Attributes$keytype = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'keytype', value);
@@ -7744,14 +8207,8 @@ var _elm_lang$html$Html_Attributes$downloadAs = function (value) {
 var _elm_lang$html$Html_Attributes$hreflang = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'hreflang', value);
 };
-var _elm_lang$html$Html_Attributes$media = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'media', value);
-};
 var _elm_lang$html$Html_Attributes$ping = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'ping', value);
-};
-var _elm_lang$html$Html_Attributes$rel = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'rel', value);
 };
 var _elm_lang$html$Html_Attributes$start = function (n) {
 	return A2(
@@ -7764,9 +8221,6 @@ var _elm_lang$html$Html_Attributes$headers = function (value) {
 };
 var _elm_lang$html$Html_Attributes$scope = function (value) {
 	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'scope', value);
-};
-var _elm_lang$html$Html_Attributes$manifest = function (value) {
-	return A2(_elm_lang$html$Html_Attributes$stringProperty, 'manifest', value);
 };
 var _elm_lang$html$Html_Attributes$boolProperty = F2(
 	function (name, bool) {
@@ -7848,21 +8302,35 @@ var _elm_lang$html$Html_Attributes$classList = function (list) {
 			' ',
 			A2(
 				_elm_lang$core$List$map,
-				_elm_lang$core$Basics$fst,
-				A2(_elm_lang$core$List$filter, _elm_lang$core$Basics$snd, list))));
+				_elm_lang$core$Tuple$first,
+				A2(_elm_lang$core$List$filter, _elm_lang$core$Tuple$second, list))));
 };
 var _elm_lang$html$Html_Attributes$style = _elm_lang$virtual_dom$VirtualDom$style;
 
-var _elm_lang$html$Html_Events$keyCode = A2(_elm_lang$core$Json_Decode_ops[':='], 'keyCode', _elm_lang$core$Json_Decode$int);
+var _elm_lang$html$Html_Events$keyCode = A2(_elm_lang$core$Json_Decode$field, 'keyCode', _elm_lang$core$Json_Decode$int);
 var _elm_lang$html$Html_Events$targetChecked = A2(
 	_elm_lang$core$Json_Decode$at,
-	_elm_lang$core$Native_List.fromArray(
-		['target', 'checked']),
+	{
+		ctor: '::',
+		_0: 'target',
+		_1: {
+			ctor: '::',
+			_0: 'checked',
+			_1: {ctor: '[]'}
+		}
+	},
 	_elm_lang$core$Json_Decode$bool);
 var _elm_lang$html$Html_Events$targetValue = A2(
 	_elm_lang$core$Json_Decode$at,
-	_elm_lang$core$Native_List.fromArray(
-		['target', 'value']),
+	{
+		ctor: '::',
+		_0: 'target',
+		_1: {
+			ctor: '::',
+			_0: 'value',
+			_1: {ctor: '[]'}
+		}
+	},
 	_elm_lang$core$Json_Decode$string);
 var _elm_lang$html$Html_Events$defaultOptions = _elm_lang$virtual_dom$VirtualDom$defaultOptions;
 var _elm_lang$html$Html_Events$onWithOptions = _elm_lang$virtual_dom$VirtualDom$onWithOptions;
@@ -7954,296 +8422,27 @@ var _elm_lang$html$Html_Events$Options = F2(
 		return {stopPropagation: a, preventDefault: b};
 	});
 
-var _evancz$elm_graphics$Text$wrap = F3(
-	function (maybeHref, styles, insides) {
-		var linkedInsides = function () {
-			var _p0 = maybeHref;
-			if (_p0.ctor === 'Nothing') {
-				return insides;
-			} else {
-				return A2(
-					_elm_lang$core$Basics_ops['++'],
-					'<a href=\"',
-					A2(
-						_elm_lang$core$Basics_ops['++'],
-						_p0._0,
-						A2(
-							_elm_lang$core$Basics_ops['++'],
-							'\">',
-							A2(_elm_lang$core$Basics_ops['++'], insides, '</a>'))));
-			}
-		}();
-		return _elm_lang$core$Native_Utils.eq(styles, '') ? linkedInsides : A2(
-			_elm_lang$core$Basics_ops['++'],
-			'<span style=\"',
-			A2(
-				_elm_lang$core$Basics_ops['++'],
-				styles,
-				A2(
-					_elm_lang$core$Basics_ops['++'],
-					'\">',
-					A2(_elm_lang$core$Basics_ops['++'], linkedInsides, '</span>'))));
-	});
-var _evancz$elm_graphics$Text$replace = F3(
-	function (from, to, str) {
-		return A4(
-			_elm_lang$core$Regex$replace,
-			_elm_lang$core$Regex$All,
-			_elm_lang$core$Regex$regex(from),
-			function (_p1) {
-				return to;
-			},
-			str);
-	});
-var _evancz$elm_graphics$Text$toHtmlString = function (text) {
-	return A3(_evancz$elm_graphics$Text$toHtmlStringHelp, _elm_lang$core$Maybe$Nothing, '', text);
-};
-var _evancz$elm_graphics$Text$toHtmlStringHelp = F3(
-	function (maybeHref, styles, text) {
-		toHtmlStringHelp:
-		while (true) {
-			var _p2 = text;
-			switch (_p2.ctor) {
-				case 'Str':
-					return A3(
-						_evancz$elm_graphics$Text$wrap,
-						maybeHref,
-						styles,
-						A2(
-							_elm_lang$core$String$join,
-							'<br>',
-							A2(
-								_elm_lang$core$List$map,
-								A2(_evancz$elm_graphics$Text$replace, ' ', '&nbsp;'),
-								_elm_lang$core$String$lines(
-									A3(
-										_evancz$elm_graphics$Text$replace,
-										'>',
-										'&#62;',
-										A3(
-											_evancz$elm_graphics$Text$replace,
-											'<',
-											'&#60;',
-											A3(
-												_evancz$elm_graphics$Text$replace,
-												'\'',
-												'&#39;',
-												A3(_evancz$elm_graphics$Text$replace, '\"', '&#34;', _p2._0))))))));
-				case 'Append':
-					return A3(
-						_evancz$elm_graphics$Text$wrap,
-						maybeHref,
-						styles,
-						A2(
-							_elm_lang$core$Basics_ops['++'],
-							_evancz$elm_graphics$Text$toHtmlString(_p2._0),
-							_evancz$elm_graphics$Text$toHtmlString(_p2._1)));
-				case 'Link':
-					var _v2 = _elm_lang$core$Maybe$Just(
-						A2(_elm_lang$core$Maybe$withDefault, _p2._0, maybeHref)),
-						_v3 = styles,
-						_v4 = _p2._1;
-					maybeHref = _v2;
-					styles = _v3;
-					text = _v4;
-					continue toHtmlStringHelp;
-				default:
-					var _v5 = maybeHref,
-						_v6 = A2(
-						_elm_lang$core$Basics_ops['++'],
-						styles,
-						A2(
-							_elm_lang$core$Basics_ops['++'],
-							_p2._0,
-							A2(
-								_elm_lang$core$Basics_ops['++'],
-								':',
-								A2(_elm_lang$core$Basics_ops['++'], _p2._1, ';')))),
-						_v7 = _p2._2;
-					maybeHref = _v5;
-					styles = _v6;
-					text = _v7;
-					continue toHtmlStringHelp;
-			}
+var _user$project$PuzzleModule$initCounter = {
+	ctor: '::',
+	_0: 0,
+	_1: {
+		ctor: '::',
+		_0: 0,
+		_1: {
+			ctor: '::',
+			_0: 0,
+			_1: {ctor: '[]'}
 		}
-	});
-var _evancz$elm_graphics$Text$colorToCss = function (color) {
-	var _p3 = _elm_lang$core$Color$toRgb(color);
-	var red = _p3.red;
-	var green = _p3.green;
-	var blue = _p3.blue;
-	var alpha = _p3.alpha;
-	return A2(
-		_elm_lang$core$Basics_ops['++'],
-		'rgba(',
-		A2(
-			_elm_lang$core$Basics_ops['++'],
-			_elm_lang$core$Basics$toString(red),
-			A2(
-				_elm_lang$core$Basics_ops['++'],
-				', ',
-				A2(
-					_elm_lang$core$Basics_ops['++'],
-					_elm_lang$core$Basics$toString(green),
-					A2(
-						_elm_lang$core$Basics_ops['++'],
-						', ',
-						A2(
-							_elm_lang$core$Basics_ops['++'],
-							_elm_lang$core$Basics$toString(blue),
-							A2(
-								_elm_lang$core$Basics_ops['++'],
-								', ',
-								A2(
-									_elm_lang$core$Basics_ops['++'],
-									_elm_lang$core$Basics$toString(alpha),
-									')'))))))));
+	}
 };
-var _evancz$elm_graphics$Text$typefacesToString = function (faces) {
-	return A2(
-		_elm_lang$core$Basics_ops['++'],
-		'\'',
-		A2(
-			_elm_lang$core$Basics_ops['++'],
-			A2(_elm_lang$core$String$join, '\', \'', faces),
-			'\''));
-};
-var _evancz$elm_graphics$Text$maybeAdd = F3(
-	function (add, maybeValue, text) {
-		var _p4 = maybeValue;
-		if (_p4.ctor === 'Nothing') {
-			return text;
-		} else {
-			return A2(add, _p4._0, text);
-		}
-	});
-var _evancz$elm_graphics$Text$defaultStyle = {
-	typeface: _elm_lang$core$Native_List.fromArray(
-		[]),
-	height: _elm_lang$core$Maybe$Nothing,
-	color: _elm_lang$core$Color$black,
-	bold: false,
-	italic: false,
-	line: _elm_lang$core$Maybe$Nothing
-};
-var _evancz$elm_graphics$Text$Style = F6(
-	function (a, b, c, d, e, f) {
-		return {typeface: a, height: b, color: c, bold: d, italic: e, line: f};
-	});
-var _evancz$elm_graphics$Text$Meta = F3(
-	function (a, b, c) {
-		return {ctor: 'Meta', _0: a, _1: b, _2: c};
-	});
-var _evancz$elm_graphics$Text$typeface = F2(
-	function (faces, text) {
-		var _p5 = faces;
-		if (_p5.ctor === '[]') {
-			return text;
-		} else {
-			return A3(
-				_evancz$elm_graphics$Text$Meta,
-				'font-family',
-				_evancz$elm_graphics$Text$typefacesToString(faces),
-				text);
-		}
-	});
-var _evancz$elm_graphics$Text$monospace = function (text) {
-	return A3(_evancz$elm_graphics$Text$Meta, 'font-family', 'monospace', text);
-};
-var _evancz$elm_graphics$Text$height = F2(
-	function (px, text) {
-		return A3(
-			_evancz$elm_graphics$Text$Meta,
-			'font-size',
-			A2(
-				_elm_lang$core$Basics_ops['++'],
-				_elm_lang$core$Basics$toString(px),
-				'px'),
-			text);
-	});
-var _evancz$elm_graphics$Text$color = F2(
-	function (color, text) {
-		return A3(
-			_evancz$elm_graphics$Text$Meta,
-			'color',
-			_evancz$elm_graphics$Text$colorToCss(color),
-			text);
-	});
-var _evancz$elm_graphics$Text$bold = function (text) {
-	return A3(_evancz$elm_graphics$Text$Meta, 'font-weight', 'bold', text);
-};
-var _evancz$elm_graphics$Text$italic = function (text) {
-	return A3(_evancz$elm_graphics$Text$Meta, 'font-style', 'italic', text);
-};
-var _evancz$elm_graphics$Text$line = F2(
-	function (lineTag, text) {
-		var decoration = function () {
-			var _p6 = lineTag;
-			switch (_p6.ctor) {
-				case 'Under':
-					return 'underline';
-				case 'Over':
-					return 'overline';
-				default:
-					return 'line-through';
-			}
-		}();
-		return A3(_evancz$elm_graphics$Text$Meta, 'text-decoration', decoration, text);
-	});
-var _evancz$elm_graphics$Text$style = F2(
-	function (sty, text) {
-		return A3(
-			_evancz$elm_graphics$Text$maybeAdd,
-			_evancz$elm_graphics$Text$height,
-			sty.height,
-			A3(
-				_evancz$elm_graphics$Text$maybeAdd,
-				_evancz$elm_graphics$Text$line,
-				sty.line,
-				(sty.italic ? _evancz$elm_graphics$Text$italic : _elm_lang$core$Basics$identity)(
-					(sty.bold ? _evancz$elm_graphics$Text$bold : _elm_lang$core$Basics$identity)(
-						A2(
-							_evancz$elm_graphics$Text$typeface,
-							sty.typeface,
-							A2(_evancz$elm_graphics$Text$color, sty.color, text))))));
-	});
-var _evancz$elm_graphics$Text$Link = F2(
-	function (a, b) {
-		return {ctor: 'Link', _0: a, _1: b};
-	});
-var _evancz$elm_graphics$Text$link = _evancz$elm_graphics$Text$Link;
-var _evancz$elm_graphics$Text$Append = F2(
-	function (a, b) {
-		return {ctor: 'Append', _0: a, _1: b};
-	});
-var _evancz$elm_graphics$Text$append = _evancz$elm_graphics$Text$Append;
-var _evancz$elm_graphics$Text$Str = function (a) {
-	return {ctor: 'Str', _0: a};
-};
-var _evancz$elm_graphics$Text$fromString = _evancz$elm_graphics$Text$Str;
-var _evancz$elm_graphics$Text$empty = _evancz$elm_graphics$Text$fromString('');
-var _evancz$elm_graphics$Text$concat = function (texts) {
-	return A3(_elm_lang$core$List$foldr, _evancz$elm_graphics$Text$append, _evancz$elm_graphics$Text$empty, texts);
-};
-var _evancz$elm_graphics$Text$join = F2(
-	function (seperator, texts) {
-		return _evancz$elm_graphics$Text$concat(
-			A2(_elm_lang$core$List$intersperse, seperator, texts));
-	});
-var _evancz$elm_graphics$Text$Through = {ctor: 'Through'};
-var _evancz$elm_graphics$Text$Over = {ctor: 'Over'};
-var _evancz$elm_graphics$Text$Under = {ctor: 'Under'};
-
-var _jkbits1$elm_work$PuzzleModule$initCounter = _elm_lang$core$Native_List.fromArray(
-	[0, 0, 0]);
-var _jkbits1$elm_work$PuzzleModule$headCounter = A2(
+var _user$project$PuzzleModule$headCounter = A2(
 	_elm_lang$core$List$foldr,
 	F2(
 		function (h, t) {
 			return h;
 		}),
 	0);
-var _jkbits1$elm_work$PuzzleModule$quotRem = F2(
+var _user$project$PuzzleModule$quotRem = F2(
 	function (a, b) {
 		var quot = A2(
 			F2(
@@ -8258,29 +8457,29 @@ var _jkbits1$elm_work$PuzzleModule$quotRem = F2(
 			_1: A2(_elm_lang$core$Basics$rem, a, b)
 		};
 	});
-var _jkbits1$elm_work$PuzzleModule$digitsRev = F2(
+var _user$project$PuzzleModule$digitsRev = F2(
 	function (base, n) {
 		var _p0 = n;
 		if (_p0 === 0) {
-			return _elm_lang$core$Native_List.fromArray(
-				[]);
+			return {ctor: '[]'};
 		} else {
-			var _p1 = A2(_jkbits1$elm_work$PuzzleModule$quotRem, n, base);
+			var _p1 = A2(_user$project$PuzzleModule$quotRem, n, base);
 			var rest = _p1._0;
 			var lastDigit = _p1._1;
-			return A2(
-				_elm_lang$core$List_ops['::'],
-				lastDigit,
-				A2(_jkbits1$elm_work$PuzzleModule$digitsRev, base, rest));
+			return {
+				ctor: '::',
+				_0: lastDigit,
+				_1: A2(_user$project$PuzzleModule$digitsRev, base, rest)
+			};
 		}
 	});
-var _jkbits1$elm_work$PuzzleModule$digits = function (base) {
+var _user$project$PuzzleModule$digits = function (base) {
 	return function (_p2) {
 		return _elm_lang$core$List$reverse(
-			A2(_jkbits1$elm_work$PuzzleModule$digitsRev, base, _p2));
+			A2(_user$project$PuzzleModule$digitsRev, base, _p2));
 	};
 };
-var _jkbits1$elm_work$PuzzleModule$getCounter = function (x) {
+var _user$project$PuzzleModule$getCounter = function (x) {
 	getCounter:
 	while (true) {
 		var _p3 = _elm_lang$core$Native_Utils.cmp(x, 512) > -1;
@@ -8289,15 +8488,26 @@ var _jkbits1$elm_work$PuzzleModule$getCounter = function (x) {
 			x = _v2;
 			continue getCounter;
 		} else {
-			var xs = A2(_jkbits1$elm_work$PuzzleModule$digits, 8, x);
+			var xs = A2(_user$project$PuzzleModule$digits, 8, x);
 			var _p4 = _elm_lang$core$List$length(xs);
 			switch (_p4) {
 				case 0:
 					return {
 						ctor: '_Tuple2',
 						_0: x,
-						_1: _elm_lang$core$Native_List.fromArray(
-							[0, 0, 0])
+						_1: {
+							ctor: '::',
+							_0: 0,
+							_1: {
+								ctor: '::',
+								_0: 0,
+								_1: {
+									ctor: '::',
+									_0: 0,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
 					};
 				case 1:
 					return {
@@ -8305,8 +8515,15 @@ var _jkbits1$elm_work$PuzzleModule$getCounter = function (x) {
 						_0: x,
 						_1: A2(
 							_elm_lang$core$Basics_ops['++'],
-							_elm_lang$core$Native_List.fromArray(
-								[0, 0]),
+							{
+								ctor: '::',
+								_0: 0,
+								_1: {
+									ctor: '::',
+									_0: 0,
+									_1: {ctor: '[]'}
+								}
+							},
 							xs)
 					};
 				case 2:
@@ -8315,8 +8532,11 @@ var _jkbits1$elm_work$PuzzleModule$getCounter = function (x) {
 						_0: x,
 						_1: A2(
 							_elm_lang$core$Basics_ops['++'],
-							_elm_lang$core$Native_List.fromArray(
-								[0]),
+							{
+								ctor: '::',
+								_0: 0,
+								_1: {ctor: '[]'}
+							},
 							xs)
 					};
 				default:
@@ -8325,7 +8545,7 @@ var _jkbits1$elm_work$PuzzleModule$getCounter = function (x) {
 		}
 	}
 };
-var _jkbits1$elm_work$PuzzleModule$elem2 = F2(
+var _user$project$PuzzleModule$elem2 = F2(
 	function (a, answerLoop) {
 		elem2:
 		while (true) {
@@ -8338,8 +8558,7 @@ var _jkbits1$elm_work$PuzzleModule$elem2 = F2(
 				} else {
 					var _p7 = _elm_lang$core$Native_Utils.eq(
 						_p8,
-						_elm_lang$core$Native_List.fromArray(
-							[]));
+						{ctor: '[]'});
 					if (_p7 === true) {
 						return false;
 					} else {
@@ -8355,7 +8574,7 @@ var _jkbits1$elm_work$PuzzleModule$elem2 = F2(
 			}
 		}
 	});
-var _jkbits1$elm_work$PuzzleModule$headX = function (xs) {
+var _user$project$PuzzleModule$headX = function (xs) {
 	var h = _elm_lang$core$List$head(xs);
 	var _p9 = h;
 	if (_p9.ctor === 'Just') {
@@ -8363,65 +8582,67 @@ var _jkbits1$elm_work$PuzzleModule$headX = function (xs) {
 	} else {
 		return {
 			ctor: '_Tuple2',
-			_0: _elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$core$Native_List.fromArray(
-					[0])
-				]),
-			_1: _elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$core$Native_List.fromArray(
-					[0])
-				])
+			_0: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 0,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 0,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			}
 		};
 	}
 };
-var _jkbits1$elm_work$PuzzleModule$headLLIxx = function (xs) {
-	var h = _elm_lang$core$List$head(xs);
-	var _p10 = h;
-	if (_p10.ctor === 'Just') {
-		return _p10._0;
-	} else {
-		return _elm_lang$core$Native_List.fromArray(
-			[]);
-	}
-};
-var _jkbits1$elm_work$PuzzleModule$headLLI = A2(
+var _user$project$PuzzleModule$headLLI = A2(
 	_elm_lang$core$List$foldr,
 	F2(
 		function (h, t) {
 			return h;
 		}),
-	_elm_lang$core$Native_List.fromArray(
-		[]));
-var _jkbits1$elm_work$PuzzleModule$wheelPermsItem = F2(
+	{ctor: '[]'});
+var _user$project$PuzzleModule$wheelPermsItem = F2(
 	function (idx, loop) {
-		return _jkbits1$elm_work$PuzzleModule$headLLI(
+		return _user$project$PuzzleModule$headLLI(
 			A2(_elm_lang$core$List$drop, idx, loop));
 	});
-var _jkbits1$elm_work$PuzzleModule$threeWheelsPermsItemByCounter = F4(
-	function (first, secLoop, thrLoop, _p11) {
-		var _p12 = _p11;
-		var _p13 = _p12._1;
-		var thr_idx = _jkbits1$elm_work$PuzzleModule$headCounter(
-			A2(_elm_lang$core$List$drop, 1, _p13));
-		var sec_idx = _jkbits1$elm_work$PuzzleModule$headCounter(_p13);
+var _user$project$PuzzleModule$threeWheelsPermsItemByCounter = F4(
+	function (first, secLoop, thrLoop, _p10) {
+		var _p11 = _p10;
+		var _p12 = _p11._1;
+		var thr_idx = _user$project$PuzzleModule$headCounter(
+			A2(_elm_lang$core$List$drop, 1, _p12));
+		var sec_idx = _user$project$PuzzleModule$headCounter(_p12);
 		return A2(
 			_elm_lang$core$Basics_ops['++'],
-			_elm_lang$core$Native_List.fromArray(
-				[first]),
+			{
+				ctor: '::',
+				_0: first,
+				_1: {ctor: '[]'}
+			},
 			A2(
 				_elm_lang$core$Basics_ops['++'],
-				_elm_lang$core$Native_List.fromArray(
-					[
-						A2(_jkbits1$elm_work$PuzzleModule$wheelPermsItem, sec_idx, secLoop)
-					]),
-				_elm_lang$core$Native_List.fromArray(
-					[
-						A2(_jkbits1$elm_work$PuzzleModule$wheelPermsItem, thr_idx, thrLoop)
-					])));
+				{
+					ctor: '::',
+					_0: A2(_user$project$PuzzleModule$wheelPermsItem, sec_idx, secLoop),
+					_1: {ctor: '[]'}
+				},
+				{
+					ctor: '::',
+					_0: A2(_user$project$PuzzleModule$wheelPermsItem, thr_idx, thrLoop),
+					_1: {ctor: '[]'}
+				}));
 	});
-var _jkbits1$elm_work$PuzzleModule$zip3 = F3(
+var _user$project$PuzzleModule$zip3 = F3(
 	function (pos1, pos2, pos3) {
 		return A4(
 			_elm_lang$core$List$map3,
@@ -8433,70 +8654,71 @@ var _jkbits1$elm_work$PuzzleModule$zip3 = F3(
 			pos2,
 			pos3);
 	});
-var _jkbits1$elm_work$PuzzleModule$getSpecificPos = function (pos) {
-	return function (_p14) {
-		return _jkbits1$elm_work$PuzzleModule$headLLI(
-			A2(_elm_lang$core$List$drop, pos, _p14));
+var _user$project$PuzzleModule$getSpecificPos = function (pos) {
+	return function (_p13) {
+		return _user$project$PuzzleModule$headLLI(
+			A2(_elm_lang$core$List$drop, pos, _p13));
 	};
 };
-var _jkbits1$elm_work$PuzzleModule$columnsFromPermutation = function (perm) {
-	var thrPos = _jkbits1$elm_work$PuzzleModule$headLLI(
+var _user$project$PuzzleModule$columnsFromPermutation = function (perm) {
+	var thrPos = _user$project$PuzzleModule$headLLI(
 		A2(_elm_lang$core$List$drop, 2, perm));
-	var secPos = _jkbits1$elm_work$PuzzleModule$headLLI(
+	var secPos = _user$project$PuzzleModule$headLLI(
 		A2(_elm_lang$core$List$drop, 1, perm));
-	var firstPos = A2(_jkbits1$elm_work$PuzzleModule$getSpecificPos, 0, perm);
-	return A3(_jkbits1$elm_work$PuzzleModule$zip3, firstPos, secPos, thrPos);
+	var firstPos = A2(_user$project$PuzzleModule$getSpecificPos, 0, perm);
+	return A3(_user$project$PuzzleModule$zip3, firstPos, secPos, thrPos);
 };
-var _jkbits1$elm_work$PuzzleModule$wheelsTuple = function (xxs) {
-	var thr = A2(_jkbits1$elm_work$PuzzleModule$getSpecificPos, 2, xxs);
-	var sec = A2(_jkbits1$elm_work$PuzzleModule$getSpecificPos, 1, xxs);
-	var inn = A2(_jkbits1$elm_work$PuzzleModule$getSpecificPos, 0, xxs);
-	return A3(_jkbits1$elm_work$PuzzleModule$zip3, inn, sec, thr);
+var _user$project$PuzzleModule$wheelsTuple = function (xxs) {
+	var thr = A2(_user$project$PuzzleModule$getSpecificPos, 2, xxs);
+	var sec = A2(_user$project$PuzzleModule$getSpecificPos, 1, xxs);
+	var inn = A2(_user$project$PuzzleModule$getSpecificPos, 0, xxs);
+	return A3(_user$project$PuzzleModule$zip3, inn, sec, thr);
 };
-var _jkbits1$elm_work$PuzzleModule$sumColumn = function (_p15) {
-	var _p16 = _p15;
-	return (_p16._0 + _p16._1) + _p16._2;
+var _user$project$PuzzleModule$sumColumn = function (_p14) {
+	var _p15 = _p14;
+	return (_p15._0 + _p15._1) + _p15._2;
 };
-var _jkbits1$elm_work$PuzzleModule$sumPlusPerm = function (perm) {
-	return _elm_lang$core$Native_List.fromArray(
-		[
-			{
+var _user$project$PuzzleModule$sumPlusPerm = function (perm) {
+	return {
+		ctor: '::',
+		_0: {
 			ctor: '_Tuple2',
 			_0: A2(
 				_elm_lang$core$List$map,
-				_jkbits1$elm_work$PuzzleModule$sumColumn,
-				_jkbits1$elm_work$PuzzleModule$columnsFromPermutation(perm)),
+				_user$project$PuzzleModule$sumColumn,
+				_user$project$PuzzleModule$columnsFromPermutation(perm)),
 			_1: perm
-		}
-		]);
+		},
+		_1: {ctor: '[]'}
+	};
 };
-var _jkbits1$elm_work$PuzzleModule$getWheelsPermAnswers = F4(
+var _user$project$PuzzleModule$getWheelsPermAnswers = F4(
 	function (first, secLoop, thrLoop, n) {
 		return A2(
 			_elm_lang$core$List$map,
-			_jkbits1$elm_work$PuzzleModule$sumColumn,
-			_jkbits1$elm_work$PuzzleModule$wheelsTuple(
+			_user$project$PuzzleModule$sumColumn,
+			_user$project$PuzzleModule$wheelsTuple(
 				A4(
-					_jkbits1$elm_work$PuzzleModule$threeWheelsPermsItemByCounter,
+					_user$project$PuzzleModule$threeWheelsPermsItemByCounter,
 					first,
 					secLoop,
 					thrLoop,
-					_jkbits1$elm_work$PuzzleModule$getCounter(n))));
+					_user$project$PuzzleModule$getCounter(n))));
 	});
-var _jkbits1$elm_work$PuzzleModule$findAnswerCS = F4(
+var _user$project$PuzzleModule$findAnswerCS = F4(
 	function (first, secLoop, thrLoop, ansLoop) {
-		var ansIdx = _jkbits1$elm_work$PuzzleModule$headCounter(
+		var ansIdx = _user$project$PuzzleModule$headCounter(
 			A2(
 				_elm_lang$core$List$map,
-				function (_p17) {
-					var _p18 = _p17;
-					return _p18._0;
+				function (_p16) {
+					var _p17 = _p16;
+					return _p17._0;
 				},
 				A2(
 					_elm_lang$core$List$filter,
-					function (_p19) {
-						var _p20 = _p19;
-						return _elm_lang$core$Native_Utils.eq(_p20._1, true);
+					function (_p18) {
+						var _p19 = _p18;
+						return _elm_lang$core$Native_Utils.eq(_p19._1, true);
 					},
 					A2(
 						_elm_lang$core$List$map,
@@ -8505,22 +8727,22 @@ var _jkbits1$elm_work$PuzzleModule$findAnswerCS = F4(
 								ctor: '_Tuple2',
 								_0: i,
 								_1: A2(
-									_jkbits1$elm_work$PuzzleModule$elem2,
-									A4(_jkbits1$elm_work$PuzzleModule$getWheelsPermAnswers, first, secLoop, thrLoop, i),
+									_user$project$PuzzleModule$elem2,
+									A4(_user$project$PuzzleModule$getWheelsPermAnswers, first, secLoop, thrLoop, i),
 									ansLoop)
 							};
 						},
-						_elm_lang$core$Native_List.range(1, 512)))));
-		var answers = A4(_jkbits1$elm_work$PuzzleModule$getWheelsPermAnswers, first, secLoop, thrLoop, ansIdx);
+						A2(_elm_lang$core$List$range, 1, 512)))));
+		var answers = A4(_user$project$PuzzleModule$getWheelsPermAnswers, first, secLoop, thrLoop, ansIdx);
 		var loopsPerm = A4(
-			_jkbits1$elm_work$PuzzleModule$threeWheelsPermsItemByCounter,
+			_user$project$PuzzleModule$threeWheelsPermsItemByCounter,
 			first,
 			secLoop,
 			thrLoop,
-			_jkbits1$elm_work$PuzzleModule$getCounter(ansIdx));
+			_user$project$PuzzleModule$getCounter(ansIdx));
 		return {ctor: '_Tuple2', _0: answers, _1: loopsPerm};
 	});
-var _jkbits1$elm_work$PuzzleModule$appendTwoWheelPerms = F2(
+var _user$project$PuzzleModule$appendTwoWheelPerms = F2(
 	function (twoWheelPermsLocal, thrPos) {
 		return A2(
 			_elm_lang$core$List$map,
@@ -8528,193 +8750,278 @@ var _jkbits1$elm_work$PuzzleModule$appendTwoWheelPerms = F2(
 				return A2(
 					_elm_lang$core$Basics_ops['++'],
 					twoLoopsPerm,
-					_elm_lang$core$Native_List.fromArray(
-						[thrPos]));
+					{
+						ctor: '::',
+						_0: thrPos,
+						_1: {ctor: '[]'}
+					});
 			},
 			twoWheelPermsLocal);
 	});
-var _jkbits1$elm_work$PuzzleModule$twoWheelPerms = F2(
+var _user$project$PuzzleModule$twoWheelPerms = F2(
 	function (first, secLoop) {
 		return A2(
 			_elm_lang$core$List$map,
 			function (secPosition) {
-				return A2(
-					_elm_lang$core$List_ops['::'],
-					first,
-					A2(
-						_elm_lang$core$List_ops['::'],
-						secPosition,
-						_elm_lang$core$Native_List.fromArray(
-							[])));
+				return {
+					ctor: '::',
+					_0: first,
+					_1: {
+						ctor: '::',
+						_0: secPosition,
+						_1: {ctor: '[]'}
+					}
+				};
 			},
 			secLoop);
 	});
-var _jkbits1$elm_work$PuzzleModule$threeLoopPerms = F3(
+var _user$project$PuzzleModule$threeLoopPerms = F3(
 	function (first, secLoop, thrLoop) {
-		var addPosToTwoWheelPerms = _jkbits1$elm_work$PuzzleModule$appendTwoWheelPerms(
-			A2(_jkbits1$elm_work$PuzzleModule$twoWheelPerms, first, secLoop));
+		var addPosToTwoWheelPerms = _user$project$PuzzleModule$appendTwoWheelPerms(
+			A2(_user$project$PuzzleModule$twoWheelPerms, first, secLoop));
 		return _elm_lang$core$List$concat(
 			A2(_elm_lang$core$List$map, addPosToTwoWheelPerms, thrLoop));
 	});
-var _jkbits1$elm_work$PuzzleModule$answersPlusPerm = F3(
+var _user$project$PuzzleModule$answersPlusPerm = F3(
 	function (first, secLoop, thrLoop) {
 		return _elm_lang$core$List$concat(
 			A2(
 				_elm_lang$core$List$map,
-				_jkbits1$elm_work$PuzzleModule$sumPlusPerm,
-				A3(_jkbits1$elm_work$PuzzleModule$threeLoopPerms, first, secLoop, thrLoop)));
+				_user$project$PuzzleModule$sumPlusPerm,
+				A3(_user$project$PuzzleModule$threeLoopPerms, first, secLoop, thrLoop)));
 	});
-var _jkbits1$elm_work$PuzzleModule$findSpecificAnswer = F4(
+var _user$project$PuzzleModule$findSpecificAnswer = F4(
 	function (first, secLoop, thrLoop, answersLoop) {
 		return A2(
 			_elm_lang$core$List$filter,
-			function (_p21) {
-				var _p22 = _p21;
-				return A2(_jkbits1$elm_work$PuzzleModule$elem2, _p22._0, answersLoop);
+			function (_p20) {
+				var _p21 = _p20;
+				return A2(_user$project$PuzzleModule$elem2, _p21._0, answersLoop);
 			},
-			A3(_jkbits1$elm_work$PuzzleModule$answersPlusPerm, first, secLoop, thrLoop));
+			A3(_user$project$PuzzleModule$answersPlusPerm, first, secLoop, thrLoop));
 	});
-var _jkbits1$elm_work$PuzzleModule$turnWheel = F2(
+var _user$project$PuzzleModule$turnWheel = F2(
 	function (wheel, turns) {
 		return A2(
 			_elm_lang$core$Basics_ops['++'],
 			A2(_elm_lang$core$List$drop, turns, wheel),
 			A2(_elm_lang$core$List$take, turns, wheel));
 	});
-var _jkbits1$elm_work$PuzzleModule$getWheelLoop = F3(
+var _user$project$PuzzleModule$getWheelLoop = F3(
 	function (positions, pos, count) {
 		getWheelLoop:
 		while (true) {
-			var _p23 = count;
-			if (_p23 === 0) {
+			var _p22 = count;
+			if (_p22 === 0) {
 				return A2(
 					_elm_lang$core$Basics_ops['++'],
-					_elm_lang$core$Native_List.fromArray(
-						[pos]),
+					{
+						ctor: '::',
+						_0: pos,
+						_1: {ctor: '[]'}
+					},
 					positions);
 			} else {
-				var _v17 = A2(
+				var _v16 = A2(
 					_elm_lang$core$Basics_ops['++'],
-					_elm_lang$core$Native_List.fromArray(
-						[
-							A2(_jkbits1$elm_work$PuzzleModule$turnWheel, pos, count)
-						]),
+					{
+						ctor: '::',
+						_0: A2(_user$project$PuzzleModule$turnWheel, pos, count),
+						_1: {ctor: '[]'}
+					},
 					positions),
-					_v18 = pos,
-					_v19 = count - 1;
-				positions = _v17;
-				pos = _v18;
-				count = _v19;
+					_v17 = pos,
+					_v18 = count - 1;
+				positions = _v16;
+				pos = _v17;
+				count = _v18;
 				continue getWheelLoop;
 			}
 		}
 	});
-var _jkbits1$elm_work$PuzzleModule$createWheelLoop = function (initialPos) {
+var _user$project$PuzzleModule$createWheelLoop = function (initialPos) {
 	return A3(
-		_jkbits1$elm_work$PuzzleModule$getWheelLoop,
-		_elm_lang$core$Native_List.fromArray(
-			[]),
+		_user$project$PuzzleModule$getWheelLoop,
+		{ctor: '[]'},
 		initialPos,
 		_elm_lang$core$List$length(initialPos) - 1);
 };
-var _jkbits1$elm_work$PuzzleModule$answersPermsLoop2 = function (_p24) {
-	var _p25 = _p24;
+var _user$project$PuzzleModule$answersPermsLoop2 = function (_p23) {
+	var _p24 = _p23;
 	return {
 		ctor: '_Tuple2',
-		_0: _jkbits1$elm_work$PuzzleModule$createWheelLoop(_p25._0),
-		_1: _p25._1
+		_0: _user$project$PuzzleModule$createWheelLoop(_p24._0),
+		_1: _p24._1
 	};
 };
-var _jkbits1$elm_work$PuzzleModule$answersPermsPlusList = F3(
+var _user$project$PuzzleModule$answersPermsPlusList = F3(
 	function (first, secLoop, thrLoop) {
 		return A2(
 			_elm_lang$core$List$map,
-			_jkbits1$elm_work$PuzzleModule$answersPermsLoop2,
-			A3(_jkbits1$elm_work$PuzzleModule$answersPlusPerm, first, secLoop, thrLoop));
+			_user$project$PuzzleModule$answersPermsLoop2,
+			A3(_user$project$PuzzleModule$answersPlusPerm, first, secLoop, thrLoop));
 	});
-var _jkbits1$elm_work$PuzzleModule$findSpecificAnswerPlusList = F4(
+var _user$project$PuzzleModule$findSpecificAnswerPlusList = F4(
 	function (first, secLoop, thrLoop, answers) {
 		return A2(
 			_elm_lang$core$List$filter,
-			function (_p26) {
-				var _p27 = _p26;
-				return A2(_jkbits1$elm_work$PuzzleModule$elem2, answers, _p27._0);
+			function (_p25) {
+				var _p26 = _p25;
+				return A2(_user$project$PuzzleModule$elem2, answers, _p26._0);
 			},
-			A3(_jkbits1$elm_work$PuzzleModule$answersPermsPlusList, first, secLoop, thrLoop));
+			A3(_user$project$PuzzleModule$answersPermsPlusList, first, secLoop, thrLoop));
 	});
-var _jkbits1$elm_work$PuzzleModule$displaySpecificAnswers = F4(
+var _user$project$PuzzleModule$displaySpecificAnswers = F4(
 	function (first, secLoop, thrLoop, answers) {
 		return function (h) {
-			return _elm_lang$core$Native_List.fromArray(
-				[h]);
+			return {
+				ctor: '::',
+				_0: h,
+				_1: {ctor: '[]'}
+			};
 		}(
-			_jkbits1$elm_work$PuzzleModule$headX(
-				A4(_jkbits1$elm_work$PuzzleModule$findSpecificAnswerPlusList, first, secLoop, thrLoop, answers)));
+			_user$project$PuzzleModule$headX(
+				A4(_user$project$PuzzleModule$findSpecificAnswerPlusList, first, secLoop, thrLoop, answers)));
 	});
-var _jkbits1$elm_work$PuzzleModule$resToNum = function (r) {
-	var _p28 = r;
-	if (_p28.ctor === 'Ok') {
-		return _p28._0;
+var _user$project$PuzzleModule$resToNum = function (r) {
+	var _p27 = r;
+	if (_p27.ctor === 'Ok') {
+		return _p27._0;
 	} else {
 		return 0;
 	}
 };
-var _jkbits1$elm_work$PuzzleModule$strToNum = function (s) {
-	return _jkbits1$elm_work$PuzzleModule$resToNum(
+var _user$project$PuzzleModule$strToNum = function (s) {
+	return _user$project$PuzzleModule$resToNum(
 		_elm_lang$core$String$toInt(
 			_elm_lang$core$String$trim(s)));
 };
-var _jkbits1$elm_work$PuzzleModule$wheelPositionFromString = function (s) {
+var _user$project$PuzzleModule$wheelPositionFromString = function (s) {
 	return A2(
 		_elm_lang$core$List$map,
-		_jkbits1$elm_work$PuzzleModule$strToNum,
+		_user$project$PuzzleModule$strToNum,
 		A2(_elm_lang$core$String$split, ',', s));
 };
-var _jkbits1$elm_work$PuzzleModule$generateWheelLoop = function (s) {
-	return _jkbits1$elm_work$PuzzleModule$createWheelLoop(
-		_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s));
+var _user$project$PuzzleModule$generateWheelLoop = function (s) {
+	return _user$project$PuzzleModule$createWheelLoop(
+		_user$project$PuzzleModule$wheelPositionFromString(s));
 };
-var _jkbits1$elm_work$PuzzleModule$makeSecLoop = _jkbits1$elm_work$PuzzleModule$generateWheelLoop;
-var _jkbits1$elm_work$PuzzleModule$makeThrLoop = _jkbits1$elm_work$PuzzleModule$generateWheelLoop;
-var _jkbits1$elm_work$PuzzleModule$makeAnsLoop = _jkbits1$elm_work$PuzzleModule$generateWheelLoop;
+var _user$project$PuzzleModule$makeSecLoop = _user$project$PuzzleModule$generateWheelLoop;
+var _user$project$PuzzleModule$makeThrLoop = _user$project$PuzzleModule$generateWheelLoop;
+var _user$project$PuzzleModule$makeAnsLoop = _user$project$PuzzleModule$generateWheelLoop;
 
-var _jkbits1$elm_work$Wheel$wheelData3 = _elm_lang$core$Native_List.fromArray(
-	[
-		{name: '1-'},
-		{name: '2-'},
-		{name: '3-'},
-		{name: '4-'},
-		{name: '5-'},
-		{name: '6-'},
-		{name: '7-'},
-		{name: '8-'},
-		{name: '9-'}
-	]);
-var _jkbits1$elm_work$Wheel$wheelData2 = _elm_lang$core$Native_List.fromArray(
-	[
-		{name: '1x'},
-		{name: '2x'},
-		{name: '3x'},
-		{name: '4x'},
-		{name: '5x'},
-		{name: '6x'},
-		{name: '7x'},
-		{name: '8x'},
-		{name: '9x'}
-	]);
-var _jkbits1$elm_work$Wheel$wheelData1 = _elm_lang$core$Native_List.fromArray(
-	[
-		{name: '1'},
-		{name: '2'},
-		{name: '3'},
-		{name: '4'},
-		{name: '5'},
-		{name: '6'},
-		{name: '7'},
-		{name: '8'},
-		{name: '9'}
-	]);
-var _jkbits1$elm_work$Wheel$createNewWheelStrings = F2(
+var _user$project$Wheel$wheelData3 = {
+	ctor: '::',
+	_0: {name: '1-'},
+	_1: {
+		ctor: '::',
+		_0: {name: '2-'},
+		_1: {
+			ctor: '::',
+			_0: {name: '3-'},
+			_1: {
+				ctor: '::',
+				_0: {name: '4-'},
+				_1: {
+					ctor: '::',
+					_0: {name: '5-'},
+					_1: {
+						ctor: '::',
+						_0: {name: '6-'},
+						_1: {
+							ctor: '::',
+							_0: {name: '7-'},
+							_1: {
+								ctor: '::',
+								_0: {name: '8-'},
+								_1: {
+									ctor: '::',
+									_0: {name: '9-'},
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+};
+var _user$project$Wheel$wheelData2 = {
+	ctor: '::',
+	_0: {name: '1x'},
+	_1: {
+		ctor: '::',
+		_0: {name: '2x'},
+		_1: {
+			ctor: '::',
+			_0: {name: '3x'},
+			_1: {
+				ctor: '::',
+				_0: {name: '4x'},
+				_1: {
+					ctor: '::',
+					_0: {name: '5x'},
+					_1: {
+						ctor: '::',
+						_0: {name: '6x'},
+						_1: {
+							ctor: '::',
+							_0: {name: '7x'},
+							_1: {
+								ctor: '::',
+								_0: {name: '8x'},
+								_1: {
+									ctor: '::',
+									_0: {name: '9x'},
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+};
+var _user$project$Wheel$wheelData1 = {
+	ctor: '::',
+	_0: {name: '1'},
+	_1: {
+		ctor: '::',
+		_0: {name: '2'},
+		_1: {
+			ctor: '::',
+			_0: {name: '3'},
+			_1: {
+				ctor: '::',
+				_0: {name: '4'},
+				_1: {
+					ctor: '::',
+					_0: {name: '5'},
+					_1: {
+						ctor: '::',
+						_0: {name: '6'},
+						_1: {
+							ctor: '::',
+							_0: {name: '7'},
+							_1: {
+								ctor: '::',
+								_0: {name: '8'},
+								_1: {
+									ctor: '::',
+									_0: {name: '9'},
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+};
+var _user$project$Wheel$createNewWheelStrings = F2(
 	function (ws, ns) {
 		return A3(
 			_elm_lang$core$List$map2,
@@ -8725,16 +9032,17 @@ var _jkbits1$elm_work$Wheel$createNewWheelStrings = F2(
 			ns,
 			ws);
 	});
-var _jkbits1$elm_work$Wheel$headWD = function (wds) {
+var _user$project$Wheel$headWD = function (wds) {
 	return A2(
 		_elm_lang$core$Maybe$withDefault,
-		_elm_lang$core$Native_List.fromArray(
-			[
-				{name: 'Test'}
-			]),
+		{
+			ctor: '::',
+			_0: {name: 'Test'},
+			_1: {ctor: '[]'}
+		},
 		_elm_lang$core$List$head(wds));
 };
-var _jkbits1$elm_work$Wheel$nthData = F2(
+var _user$project$Wheel$nthData = F2(
 	function (idx, xs) {
 		return A2(
 			_elm_lang$core$Maybe$withDefault,
@@ -8742,7 +9050,7 @@ var _jkbits1$elm_work$Wheel$nthData = F2(
 			_elm_lang$core$List$head(
 				A2(_elm_lang$core$List$drop, idx, xs)));
 	});
-var _jkbits1$elm_work$Wheel$nth = F2(
+var _user$project$Wheel$nth = F2(
 	function (idx, xs) {
 		return A2(
 			_elm_lang$core$Maybe$withDefault,
@@ -8750,25 +9058,26 @@ var _jkbits1$elm_work$Wheel$nth = F2(
 			_elm_lang$core$List$head(
 				A2(_elm_lang$core$List$drop, idx, xs)));
 	});
-var _jkbits1$elm_work$Wheel$getResponseOrDefault = F3(
+var _user$project$Wheel$getResponseOrDefault = F3(
 	function (resp, data, idx) {
 		return (_elm_lang$core$Native_Utils.cmp(
 			idx,
-			_elm_lang$core$List$length(resp)) < 0) ? A2(_jkbits1$elm_work$Wheel$nth, idx, resp) : function (_) {
+			_elm_lang$core$List$length(resp)) < 0) ? A2(_user$project$Wheel$nth, idx, resp) : function (_) {
 			return _.name;
 		}(
-			A2(_jkbits1$elm_work$Wheel$nthData, idx, data));
+			A2(_user$project$Wheel$nthData, idx, data));
 	});
-var _jkbits1$elm_work$Wheel$createFullListFromResponses = F2(
+var _user$project$Wheel$createFullListFromResponses = F2(
 	function (ws, rs) {
 		return A2(
 			_elm_lang$core$List$map,
-			A2(_jkbits1$elm_work$Wheel$getResponseOrDefault, rs, ws),
-			_elm_lang$core$Native_List.range(
+			A2(_user$project$Wheel$getResponseOrDefault, rs, ws),
+			A2(
+				_elm_lang$core$List$range,
 				0,
 				_elm_lang$core$List$length(ws)));
 	});
-var _jkbits1$elm_work$Wheel$wheelItemNames = function (ws) {
+var _user$project$Wheel$wheelItemNames = function (ws) {
 	return A2(
 		_elm_lang$core$List$map,
 		function (_) {
@@ -8776,90 +9085,11 @@ var _jkbits1$elm_work$Wheel$wheelItemNames = function (ws) {
 		},
 		ws);
 };
-var _jkbits1$elm_work$Wheel$WheelItem = function (a) {
+var _user$project$Wheel$WheelItem = function (a) {
 	return {name: a};
 };
 
-var _jkbits1$elm_work$WheelApp$colorStyle = function (success) {
-	var _p0 = success;
-	if (_p0 === true) {
-		return _elm_lang$core$Native_List.fromArray(
-			[
-				{ctor: '_Tuple2', _0: 'color', _1: 'green'}
-			]);
-	} else {
-		return _elm_lang$core$Native_List.fromArray(
-			[
-				{ctor: '_Tuple2', _0: 'color', _1: 'red'}
-			]);
-	}
-};
-var _jkbits1$elm_work$WheelApp$currentAnswers = F4(
-	function (s1, s2, s3, s4) {
-		return A2(
-			_elm_lang$core$List$map,
-			_jkbits1$elm_work$PuzzleModule$sumColumn,
-			A3(
-				_jkbits1$elm_work$PuzzleModule$zip3,
-				_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s1),
-				_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s2),
-				_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s3)));
-	});
-var _jkbits1$elm_work$WheelApp$puzzleSolved = F4(
-	function (s1, s2, s3, s4) {
-		return _elm_lang$core$Native_Utils.eq(
-			A4(_jkbits1$elm_work$WheelApp$currentAnswers, s1, s2, s3, s4),
-			_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s4));
-	});
-var _jkbits1$elm_work$WheelApp$puzzleSolvedIndicator = F4(
-	function (s1, s2, s3, s4) {
-		var solved = A4(_jkbits1$elm_work$WheelApp$puzzleSolved, s1, s2, s3, s4);
-		var solvedString = solved ? 'Yes' : A2(
-			_elm_lang$core$Basics_ops['++'],
-			'No ',
-			_elm_lang$core$Basics$toString(
-				A4(_jkbits1$elm_work$WheelApp$currentAnswers, s1, s2, s3, s4)));
-		return A2(
-			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$class('solvedPuzzle')
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html$text('Puzzle solved? - '),
-					A2(
-					_elm_lang$html$Html$span,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$style(
-							_jkbits1$elm_work$WheelApp$colorStyle(solved))
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(solvedString)
-						]))
-				]));
-	});
-var _jkbits1$elm_work$WheelApp$wheelStringFromInt = function (xs) {
-	return A2(
-		_elm_lang$core$String$join,
-		', ',
-		A2(
-			_elm_lang$core$List$map,
-			function (x) {
-				return _elm_lang$core$Basics$toString(x);
-			},
-			xs));
-};
-var _jkbits1$elm_work$WheelApp$rotateNumsString = function (s) {
-	return _jkbits1$elm_work$WheelApp$wheelStringFromInt(
-		A2(
-			_jkbits1$elm_work$PuzzleModule$turnWheel,
-			_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s),
-			1));
-};
-var _jkbits1$elm_work$WheelApp$resultsToD3Data = function (xs) {
+var _user$project$WheelApp$resultsToD3Data = function (xs) {
 	return A2(
 		_elm_lang$core$List$map,
 		function (x) {
@@ -8869,504 +9099,853 @@ var _jkbits1$elm_work$WheelApp$resultsToD3Data = function (xs) {
 		},
 		xs);
 };
-var _jkbits1$elm_work$WheelApp$d3DataFromString = function (s) {
-	return _jkbits1$elm_work$WheelApp$resultsToD3Data(
-		_jkbits1$elm_work$PuzzleModule$wheelPositionFromString(s));
-};
-var _jkbits1$elm_work$WheelApp$modelInputs = function (_p1) {
-	var _p2 = _p1;
-	return _p2._1;
-};
-var _jkbits1$elm_work$WheelApp$wheelData = F2(
-	function (model, inp) {
-		return _jkbits1$elm_work$PuzzleModule$wheelPositionFromString(
-			inp(
-				_jkbits1$elm_work$WheelApp$modelInputs(model)));
-	});
-var _jkbits1$elm_work$WheelApp$input4 = function (_p3) {
-	var _p4 = _p3;
-	return _p4._4;
-};
-var _jkbits1$elm_work$WheelApp$input3 = function (_p5) {
-	var _p6 = _p5;
-	return _p6._3;
-};
-var _jkbits1$elm_work$WheelApp$input2 = function (_p7) {
-	var _p8 = _p7;
-	return _p8._2;
-};
-var _jkbits1$elm_work$WheelApp$input1 = function (_p9) {
-	var _p10 = _p9;
-	return _p10._1;
-};
-var _jkbits1$elm_work$WheelApp$initialCalcs = {
-	ctor: '_Tuple7',
-	_0: _elm_lang$core$Native_List.fromArray(
-		[1, 2, 3]),
-	_1: _elm_lang$core$Native_List.fromArray(
-		[
-			_elm_lang$core$Native_List.fromArray(
-			[4, 5, 6])
-		]),
-	_2: _elm_lang$core$Native_List.fromArray(
-		[
-			_elm_lang$core$Native_List.fromArray(
-			[7, 8, 9])
-		]),
-	_3: _elm_lang$core$Native_List.fromArray(
-		[
-			_elm_lang$core$Native_List.fromArray(
-			[12, 15, 18])
-		]),
-	_4: _elm_lang$core$Native_List.fromArray(
-		[
-			_elm_lang$core$Native_List.fromArray(
-			[
-				_elm_lang$core$Native_List.fromArray(
-				[2])
-			])
-		]),
-	_5: _elm_lang$core$Native_List.fromArray(
-		[
-			_elm_lang$core$Native_List.fromArray(
-			[
-				_elm_lang$core$Native_List.fromArray(
-				[3])
-			])
-		]),
-	_6: {
-		ctor: '_Tuple5',
-		_0: _elm_lang$core$Native_List.fromArray(
-			[
-				{
-				ctor: '_Tuple2',
-				_0: _elm_lang$core$Native_List.fromArray(
-					[1]),
-				_1: _elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Native_List.fromArray(
-						[1])
-					])
+var _user$project$WheelApp$initialCalcs = {
+	firstList: {
+		ctor: '::',
+		_0: 1,
+		_1: {
+			ctor: '::',
+			_0: 2,
+			_1: {
+				ctor: '::',
+				_0: 3,
+				_1: {ctor: '[]'}
 			}
-			]),
-		_1: _elm_lang$core$Native_List.fromArray(
-			[
-				{
-				ctor: '_Tuple2',
-				_0: _elm_lang$core$Native_List.fromArray(
-					[1]),
-				_1: _elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Native_List.fromArray(
-						[1])
-					])
+		}
+	},
+	secLoop: {
+		ctor: '::',
+		_0: {
+			ctor: '::',
+			_0: 4,
+			_1: {
+				ctor: '::',
+				_0: 5,
+				_1: {
+					ctor: '::',
+					_0: 6,
+					_1: {ctor: '[]'}
+				}
 			}
-			]),
-		_2: _elm_lang$core$Native_List.fromArray(
-			[
-				{
-				ctor: '_Tuple2',
-				_0: _elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Native_List.fromArray(
-						[1])
-					]),
-				_1: _elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Native_List.fromArray(
-						[1])
-					])
+		},
+		_1: {ctor: '[]'}
+	},
+	thrLoop: {
+		ctor: '::',
+		_0: {
+			ctor: '::',
+			_0: 7,
+			_1: {
+				ctor: '::',
+				_0: 8,
+				_1: {
+					ctor: '::',
+					_0: 9,
+					_1: {ctor: '[]'}
+				}
 			}
-			]),
-		_3: _elm_lang$core$Native_List.fromArray(
-			[
-				{
-				ctor: '_Tuple2',
-				_0: _elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Native_List.fromArray(
-						[1])
-					]),
-				_1: _elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Native_List.fromArray(
-						[1])
-					])
+		},
+		_1: {ctor: '[]'}
+	},
+	ansLoop: {
+		ctor: '::',
+		_0: {
+			ctor: '::',
+			_0: 12,
+			_1: {
+				ctor: '::',
+				_0: 15,
+				_1: {
+					ctor: '::',
+					_0: 18,
+					_1: {ctor: '[]'}
+				}
 			}
-			]),
-		_4: {
+		},
+		_1: {ctor: '[]'}
+	},
+	twoListPerms: {
+		ctor: '::',
+		_0: {
+			ctor: '::',
+			_0: {
+				ctor: '::',
+				_0: 2,
+				_1: {ctor: '[]'}
+			},
+			_1: {ctor: '[]'}
+		},
+		_1: {ctor: '[]'}
+	},
+	threeListPerms: {
+		ctor: '::',
+		_0: {
+			ctor: '::',
+			_0: {
+				ctor: '::',
+				_0: 3,
+				_1: {ctor: '[]'}
+			},
+			_1: {ctor: '[]'}
+		},
+		_1: {ctor: '[]'}
+	},
+	ansPlusList: {
+		ctor: '::',
+		_0: {
 			ctor: '_Tuple2',
-			_0: _elm_lang$core$Native_List.fromArray(
-				[1]),
-			_1: _elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$core$Native_List.fromArray(
-					[1])
-				])
+			_0: {
+				ctor: '::',
+				_0: 1,
+				_1: {ctor: '[]'}
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 1,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			}
+		},
+		_1: {ctor: '[]'}
+	},
+	specificAnswer: {
+		ctor: '::',
+		_0: {
+			ctor: '_Tuple2',
+			_0: {
+				ctor: '::',
+				_0: 1,
+				_1: {ctor: '[]'}
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 1,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			}
+		},
+		_1: {ctor: '[]'}
+	},
+	ansPermsPlusList: {
+		ctor: '::',
+		_0: {
+			ctor: '_Tuple2',
+			_0: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 1,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 1,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			}
+		},
+		_1: {ctor: '[]'}
+	},
+	specificAnswerPlusList: {
+		ctor: '::',
+		_0: {
+			ctor: '_Tuple2',
+			_0: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 1,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			},
+			_1: {
+				ctor: '::',
+				_0: {
+					ctor: '::',
+					_0: 1,
+					_1: {ctor: '[]'}
+				},
+				_1: {ctor: '[]'}
+			}
+		},
+		_1: {ctor: '[]'}
+	},
+	findAnswerLazy3: {
+		ctor: '_Tuple2',
+		_0: {
+			ctor: '::',
+			_0: 1,
+			_1: {ctor: '[]'}
+		},
+		_1: {
+			ctor: '::',
+			_0: {
+				ctor: '::',
+				_0: 1,
+				_1: {ctor: '[]'}
+			},
+			_1: {ctor: '[]'}
 		}
 	}
 };
-var _jkbits1$elm_work$WheelApp$initialStates = _elm_lang$core$Native_List.fromArray(
-	[false, false, false, false, false, false, false, false, false, false]);
-var _jkbits1$elm_work$WheelApp$initialInputs = {ctor: '_Tuple5', _0: 0, _1: '1,2,3', _2: '4,5,6', _3: '7,8,9', _4: '12,15,18'};
-var _jkbits1$elm_work$WheelApp$initialModelState = {
-	ctor: '_Tuple4',
-	_0: _elm_lang$core$Native_List.fromArray(
-		[]),
-	_1: _jkbits1$elm_work$WheelApp$initialInputs,
-	_2: _jkbits1$elm_work$WheelApp$initialStates,
-	_3: _jkbits1$elm_work$WheelApp$initialCalcs
-};
-var _jkbits1$elm_work$WheelApp$rotButton = F2(
-	function (labelNum, msg) {
-		return A2(
-			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$class('rotButton')
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					A2(
-					_elm_lang$html$Html$button,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Events$onClick(msg)
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(
-							A2(_elm_lang$core$Basics_ops['++'], 'Rotate ', labelNum))
-						]))
-				]));
-	});
-var _jkbits1$elm_work$WheelApp$displayStyle = function (show) {
-	var _p11 = show;
-	if (_p11 === true) {
-		return _elm_lang$core$Native_List.fromArray(
-			[
-				{ctor: '_Tuple2', _0: 'display', _1: 'block'}
-			]);
-	} else {
-		return _elm_lang$core$Native_List.fromArray(
-			[
-				{ctor: '_Tuple2', _0: 'display', _1: 'none'}
-			]);
+var _user$project$WheelApp$initialStates = {
+	ctor: '::',
+	_0: false,
+	_1: {
+		ctor: '::',
+		_0: false,
+		_1: {
+			ctor: '::',
+			_0: false,
+			_1: {
+				ctor: '::',
+				_0: false,
+				_1: {
+					ctor: '::',
+					_0: false,
+					_1: {
+						ctor: '::',
+						_0: false,
+						_1: {
+							ctor: '::',
+							_0: false,
+							_1: {
+								ctor: '::',
+								_0: false,
+								_1: {
+									ctor: '::',
+									_0: false,
+									_1: {
+										ctor: '::',
+										_0: false,
+										_1: {ctor: '[]'}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 };
-var _jkbits1$elm_work$WheelApp$infoRow = F3(
+var _user$project$WheelApp$initialInputs = {count: 0, s1: '1,2,3', s2: '4,5,6', s3: '7,8,9', s4: '12,15,18'};
+var _user$project$WheelApp$initialModelState = {
+	ctor: '_Tuple4',
+	_0: {ctor: '[]'},
+	_1: _user$project$WheelApp$initialInputs,
+	_2: _user$project$WheelApp$initialStates,
+	_3: _user$project$WheelApp$initialCalcs
+};
+var _user$project$WheelApp$solvedColor = function (success) {
+	var clrStyle = function (color) {
+		return {
+			ctor: '::',
+			_0: {ctor: '_Tuple2', _0: 'color', _1: color},
+			_1: {ctor: '[]'}
+		};
+	};
+	var _p0 = success;
+	if (_p0 === true) {
+		return clrStyle('green');
+	} else {
+		return clrStyle('red');
+	}
+};
+var _user$project$WheelApp$currentAnswers = F4(
+	function (s1, s2, s3, s4) {
+		return A2(
+			_elm_lang$core$List$map,
+			_user$project$PuzzleModule$sumColumn,
+			A3(
+				_user$project$PuzzleModule$zip3,
+				_user$project$PuzzleModule$wheelPositionFromString(s1),
+				_user$project$PuzzleModule$wheelPositionFromString(s2),
+				_user$project$PuzzleModule$wheelPositionFromString(s3)));
+	});
+var _user$project$WheelApp$puzzleSolved = F4(
+	function (s1, s2, s3, s4) {
+		return _elm_lang$core$Native_Utils.eq(
+			A4(_user$project$WheelApp$currentAnswers, s1, s2, s3, s4),
+			_user$project$PuzzleModule$wheelPositionFromString(s4));
+	});
+var _user$project$WheelApp$puzzleSolvedIndicator = F4(
+	function (s1, s2, s3, s4) {
+		var solved = A4(_user$project$WheelApp$puzzleSolved, s1, s2, s3, s4);
+		var solvedString = function () {
+			var _p1 = solved;
+			if (_p1 === true) {
+				return 'Yes';
+			} else {
+				return A2(
+					_elm_lang$core$Basics_ops['++'],
+					'No ',
+					_elm_lang$core$Basics$toString(
+						A4(_user$project$WheelApp$currentAnswers, s1, s2, s3, s4)));
+			}
+		}();
+		return A2(
+			_elm_lang$html$Html$div,
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('solvedPuzzle'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html$text('Puzzle solved? - '),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$span,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$style(
+								_user$project$WheelApp$solvedColor(solved)),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(solvedString),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
+			});
+	});
+var _user$project$WheelApp$indicatorRow = function (indicator) {
+	return A2(
+		_elm_lang$html$Html$div,
+		{
+			ctor: '::',
+			_0: _elm_lang$html$Html_Attributes$class('row'),
+			_1: {ctor: '[]'}
+		},
+		{
+			ctor: '::',
+			_0: A2(
+				_elm_lang$html$Html$div,
+				{ctor: '[]'},
+				{
+					ctor: '::',
+					_0: indicator,
+					_1: {ctor: '[]'}
+				}),
+			_1: {ctor: '[]'}
+		});
+};
+var _user$project$WheelApp$displayItem = function (show) {
+	var _p2 = show;
+	if (_p2 === true) {
+		return {
+			ctor: '::',
+			_0: {ctor: '_Tuple2', _0: 'display', _1: 'block'},
+			_1: {ctor: '[]'}
+		};
+	} else {
+		return {
+			ctor: '::',
+			_0: {ctor: '_Tuple2', _0: 'display', _1: 'none'},
+			_1: {ctor: '[]'}
+		};
+	}
+};
+var _user$project$WheelApp$infoRow = F3(
 	function (label, info, displayState) {
 		return A2(
 			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$class('row'),
-					_elm_lang$html$Html_Attributes$style(
-					_jkbits1$elm_work$WheelApp$displayStyle(displayState))
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					A2(
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('row'),
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$html$Html_Attributes$style(
+						_user$project$WheelApp$displayItem(displayState)),
+					_1: {ctor: '[]'}
+				}
+			},
+			{
+				ctor: '::',
+				_0: A2(
 					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowLabel')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(label)
-						])),
-					A2(
-					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-8 permsData')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(info)
-						]))
-				]));
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowLabel'),
+						_1: {ctor: '[]'}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text(label),
+						_1: {ctor: '[]'}
+					}),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('col-sm-8 permsData'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(
+								_elm_lang$core$Basics$toString(info)),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
+			});
 	});
-var _jkbits1$elm_work$WheelApp$textStyle = _elm_lang$core$Native_List.fromArray(
-	[]);
-var _jkbits1$elm_work$WheelApp$myStyle = _elm_lang$core$Native_List.fromArray(
-	[]);
-var _jkbits1$elm_work$WheelApp$foundAnswerIndicator = F2(
+var _user$project$WheelApp$foundAnswerIndicator = F2(
 	function (answerList, show) {
-		var found = _elm_lang$core$Basics$not(
-			_elm_lang$core$Native_Utils.eq(
-				_elm_lang$core$List$length(answerList),
-				0));
-		var foundString = found ? 'Yes' : 'No';
+		var found = !_elm_lang$core$Native_Utils.eq(
+			_elm_lang$core$List$length(answerList),
+			0);
+		var foundString = function () {
+			var _p3 = found;
+			if (_p3 === true) {
+				return 'Yes';
+			} else {
+				return 'No';
+			}
+		}();
 		return A2(
 			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$class('foundAnswer'),
-					_elm_lang$html$Html_Attributes$style(
-					_jkbits1$elm_work$WheelApp$displayStyle(show))
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html$text('Does solution exist? - '),
-					A2(
-					_elm_lang$html$Html$span,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$style(
-							_jkbits1$elm_work$WheelApp$colorStyle(found))
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(foundString)
-						]))
-				]));
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('foundAnswer'),
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$html$Html_Attributes$style(
+						_user$project$WheelApp$displayItem(show)),
+					_1: {ctor: '[]'}
+				}
+			},
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html$text('Does solution exist? - '),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$span,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$style(
+								_user$project$WheelApp$solvedColor(found)),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(foundString),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
+			});
 	});
-var _jkbits1$elm_work$WheelApp$wheelOnlyRow = F3(
+var _user$project$WheelApp$showAnswerIndicator = F3(
+	function (answerList, show, ans) {
+		var found = !_elm_lang$core$Native_Utils.eq(
+			_elm_lang$core$List$length(answerList),
+			0);
+		var foundString = function () {
+			var _p4 = found;
+			if (_p4 === true) {
+				return 'Yes';
+			} else {
+				return 'No';
+			}
+		}();
+		return A2(
+			_elm_lang$html$Html$div,
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('showAnswer'),
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$html$Html_Attributes$style(
+						_user$project$WheelApp$displayItem(show)),
+					_1: {ctor: '[]'}
+				}
+			},
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html$text('Solution - '),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$span,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$style(
+								_user$project$WheelApp$solvedColor(found)),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(ans),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
+			});
+	});
+var _user$project$WheelApp$wheelOnlyRow = F3(
 	function (idx, wheelLabel, wheelData) {
 		return A2(
 			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$class('row')
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					A2(
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('row'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
 					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowLabel')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(wheelLabel)
-						])),
-					A2(
-					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowData')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(wheelData)
-						]))
-				]));
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowLabel'),
+						_1: {ctor: '[]'}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text(wheelLabel),
+						_1: {ctor: '[]'}
+					}),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowData'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(wheelData),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
+			});
 	});
-var _jkbits1$elm_work$WheelApp$inputField2 = F5(
+var _user$project$WheelApp$inputField = F5(
 	function (idVal, $default, text, updateItem, inputStyle) {
 		return A2(
 			_elm_lang$html$Html$input,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$placeholder($default),
-					_elm_lang$html$Html_Attributes$value(text),
-					_elm_lang$html$Html_Events$onInput(updateItem),
-					_elm_lang$html$Html_Attributes$id(idVal),
-					_elm_lang$html$Html_Attributes$class('form-control col-sm-2 wheelStyle')
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[]));
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$placeholder($default),
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$html$Html_Attributes$value(text),
+					_1: {
+						ctor: '::',
+						_0: _elm_lang$html$Html_Events$onInput(updateItem),
+						_1: {
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$id(idVal),
+							_1: {
+								ctor: '::',
+								_0: _elm_lang$html$Html_Attributes$class('form-control col-sm-2 wheelStyle'),
+								_1: {ctor: '[]'}
+							}
+						}
+					}
+				}
+			},
+			{ctor: '[]'});
 	});
-var _jkbits1$elm_work$WheelApp$formGroup = F6(
+var _user$project$WheelApp$formGroupBasic = F6(
 	function (lbl, idVal, val, updateItem, style, msg) {
 		return A2(
 			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$class('wheelInput')
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					A2(
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('wheelInput'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
 					_elm_lang$html$Html$label,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$for(idVal),
-							_elm_lang$html$Html_Attributes$classList(
-							_elm_lang$core$Native_List.fromArray(
-								[
-									{ctor: '_Tuple2', _0: 'control-label', _1: true},
-									{ctor: '_Tuple2', _0: 'col-sm-4', _1: true},
-									{ctor: '_Tuple2', _0: 'wheelInputLabel', _1: true}
-								]))
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(
-							A2(_elm_lang$core$Basics_ops['++'], 'Wheel ', lbl))
-						])),
-					A5(_jkbits1$elm_work$WheelApp$inputField2, idVal, lbl, val, updateItem, style)
-				]));
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$for(idVal),
+						_1: {
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('control-label col-sm-4 wheelInputLabel'),
+							_1: {ctor: '[]'}
+						}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text(
+							A2(_elm_lang$core$Basics_ops['++'], 'Circle ', lbl)),
+						_1: {ctor: '[]'}
+					}),
+				_1: {
+					ctor: '::',
+					_0: A5(_user$project$WheelApp$inputField, idVal, lbl, val, updateItem, style),
+					_1: {ctor: '[]'}
+				}
+			});
 	});
-var _jkbits1$elm_work$WheelApp$showLoopButton2 = F4(
-	function (labels, hide, action, classList) {
-		var label = _elm_lang$core$Native_Utils.eq(hide, true) ? _elm_lang$core$Basics$snd(labels) : _elm_lang$core$Basics$fst(labels);
+var _user$project$WheelApp$formGroup = F5(
+	function (lbl, idVal, val, updateItem, msg) {
+		return A6(
+			_user$project$WheelApp$formGroupBasic,
+			lbl,
+			idVal,
+			val,
+			updateItem,
+			{ctor: '[]'},
+			msg);
+	});
+var _user$project$WheelApp$showButtonBasic = F3(
+	function (action, classList, label) {
 		return A2(
 			_elm_lang$html$Html$button,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					classList,
-					_elm_lang$html$Html_Events$onClick(action)
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html$text(label)
-				]));
+			{
+				ctor: '::',
+				_0: classList,
+				_1: {
+					ctor: '::',
+					_0: _elm_lang$html$Html_Events$onClick(action),
+					_1: {ctor: '[]'}
+				}
+			},
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html$text(label),
+				_1: {ctor: '[]'}
+			});
 	});
-var _jkbits1$elm_work$WheelApp$buttonClassList2 = _elm_lang$html$Html_Attributes$classList(
-	_elm_lang$core$Native_List.fromArray(
-		[
-			{ctor: '_Tuple2', _0: 'loopButton', _1: true}
-		]));
-var _jkbits1$elm_work$WheelApp$buttonClassList = _elm_lang$html$Html_Attributes$classList(
-	_elm_lang$core$Native_List.fromArray(
-		[]));
-var _jkbits1$elm_work$WheelApp$uiButton = F2(
-	function (action, label) {
-		return A2(
-			_elm_lang$html$Html$button,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_jkbits1$elm_work$WheelApp$buttonClassList,
-					_elm_lang$html$Html_Events$onClick(action)
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html$text(label)
-				]));
+var _user$project$WheelApp$showButtonToggle = F4(
+	function (action, classList, labels, hide) {
+		var labelChoice = F2(
+			function (labels, hide) {
+				var _p5 = hide;
+				if (_p5 === true) {
+					return _elm_lang$core$Tuple$second(labels);
+				} else {
+					return _elm_lang$core$Tuple$first(labels);
+				}
+			});
+		return A3(
+			_user$project$WheelApp$showButtonBasic,
+			action,
+			classList,
+			A2(labelChoice, labels, hide));
 	});
-var _jkbits1$elm_work$WheelApp$showLoopButton = F3(
+var _user$project$WheelApp$textButtonClassList = _elm_lang$html$Html_Attributes$class('textButton');
+var _user$project$WheelApp$showButtonToggleText = F3(
 	function (labels, hide, action) {
-		var label = _elm_lang$core$Native_Utils.eq(hide, true) ? _elm_lang$core$Basics$snd(labels) : _elm_lang$core$Basics$fst(labels);
-		return A2(
-			_elm_lang$html$Html$button,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_jkbits1$elm_work$WheelApp$buttonClassList,
-					_elm_lang$html$Html_Events$onClick(action)
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html$text(label)
-				]));
+		return A4(_user$project$WheelApp$showButtonToggle, action, _user$project$WheelApp$textButtonClassList, labels, hide);
 	});
-var _jkbits1$elm_work$WheelApp$wheelRow = F7(
+var _user$project$WheelApp$emptyClassList = _elm_lang$html$Html_Attributes$classList(
+	{ctor: '[]'});
+var _user$project$WheelApp$uiButton = F2(
+	function (action, label) {
+		return A3(_user$project$WheelApp$showButtonBasic, action, _user$project$WheelApp$emptyClassList, label);
+	});
+var _user$project$WheelApp$rotButton = F2(
+	function (labelNum, action) {
+		return A2(
+			_elm_lang$html$Html$div,
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('rotButton'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
+					_user$project$WheelApp$uiButton,
+					action,
+					A2(_elm_lang$core$Basics_ops['++'], 'Rotate ', labelNum)),
+				_1: {ctor: '[]'}
+			});
+	});
+var _user$project$WheelApp$showButtonToggleLoop = F3(
+	function (labels, hide, action) {
+		return A4(_user$project$WheelApp$showButtonToggle, action, _user$project$WheelApp$emptyClassList, labels, hide);
+	});
+var _user$project$WheelApp$wheelRow = F7(
 	function (idx, wheelLabel, loopLabel, wheelData, loopData, action, hide) {
 		return A2(
 			_elm_lang$html$Html$div,
-			_elm_lang$core$Native_List.fromArray(
-				[
-					_elm_lang$html$Html_Attributes$classList(
-					_elm_lang$core$Native_List.fromArray(
-						[
-							{ctor: '_Tuple2', _0: 'row', _1: true},
-							{ctor: '_Tuple2', _0: 'wheelRow', _1: true}
-						]))
-				]),
-			_elm_lang$core$Native_List.fromArray(
-				[
-					A2(
+			{
+				ctor: '::',
+				_0: _elm_lang$html$Html_Attributes$class('row wheelRow'),
+				_1: {ctor: '[]'}
+			},
+			{
+				ctor: '::',
+				_0: A2(
 					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowLabel')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(wheelLabel)
-						])),
-					A2(
-					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowData')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(wheelData)
-						])),
-					A2(
-					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-1 plusAdjust')
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							A3(
-							_jkbits1$elm_work$WheelApp$showLoopButton,
-							{ctor: '_Tuple2', _0: '+', _1: '-'},
-							hide,
-							action)
-						])),
-					A2(
-					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2'),
-							_elm_lang$html$Html_Attributes$style(
-							A2(
-								_elm_lang$core$Basics_ops['++'],
-								_jkbits1$elm_work$WheelApp$displayStyle(hide),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										{ctor: '_Tuple2', _0: 'font-weight', _1: '700'}
-									])))
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(loopLabel)
-						])),
-					A2(
-					_elm_lang$html$Html$div,
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html_Attributes$class('col-sm-2 loopDataAdjust'),
-							_elm_lang$html$Html_Attributes$style(
-							_jkbits1$elm_work$WheelApp$displayStyle(hide))
-						]),
-					_elm_lang$core$Native_List.fromArray(
-						[
-							_elm_lang$html$Html$text(loopData)
-						]))
-				]));
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowLabel'),
+						_1: {ctor: '[]'}
+					},
+					{
+						ctor: '::',
+						_0: _elm_lang$html$Html$text(wheelLabel),
+						_1: {ctor: '[]'}
+					}),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('col-sm-2 wheelRowData'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html$text(wheelData),
+							_1: {ctor: '[]'}
+						}),
+					_1: {
+						ctor: '::',
+						_0: A2(
+							_elm_lang$html$Html$div,
+							{
+								ctor: '::',
+								_0: _elm_lang$html$Html_Attributes$class('col-sm-1 plusAdjust'),
+								_1: {ctor: '[]'}
+							},
+							{
+								ctor: '::',
+								_0: A3(
+									_user$project$WheelApp$showButtonToggleLoop,
+									{ctor: '_Tuple2', _0: '+', _1: '-'},
+									hide,
+									action),
+								_1: {ctor: '[]'}
+							}),
+						_1: {
+							ctor: '::',
+							_0: A2(
+								_elm_lang$html$Html$div,
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('col-sm-2'),
+									_1: {
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$style(
+											A2(
+												_elm_lang$core$Basics_ops['++'],
+												_user$project$WheelApp$displayItem(hide),
+												{
+													ctor: '::',
+													_0: {ctor: '_Tuple2', _0: 'font-weight', _1: '700'},
+													_1: {ctor: '[]'}
+												})),
+										_1: {ctor: '[]'}
+									}
+								},
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html$text(loopLabel),
+									_1: {ctor: '[]'}
+								}),
+							_1: {
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$div,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$class('col-sm-2 loopDataAdjust'),
+										_1: {
+											ctor: '::',
+											_0: _elm_lang$html$Html_Attributes$style(
+												_user$project$WheelApp$displayItem(hide)),
+											_1: {ctor: '[]'}
+										}
+									},
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html$text(
+											_elm_lang$core$Basics$toString(loopData)),
+										_1: {ctor: '[]'}
+									}),
+								_1: {ctor: '[]'}
+							}
+						}
+					}
+				}
+			});
 	});
-var _jkbits1$elm_work$WheelApp$maxButton = 10;
-var _jkbits1$elm_work$WheelApp$buttonVal = F2(
-	function (list, num) {
-		var h = _elm_lang$core$List$head(
-			A2(_elm_lang$core$List$drop, num - 1, list));
-		var _p12 = h;
-		if (_p12.ctor === 'Just') {
-			return _p12._0;
-		} else {
-			return false;
-		}
+var _user$project$WheelApp$maxButton = 10;
+var _user$project$WheelApp$buttonVal = F2(
+	function (buttonlist, num) {
+		return A2(
+			_elm_lang$core$Maybe$withDefault,
+			false,
+			_elm_lang$core$List$head(
+				A2(_elm_lang$core$List$drop, num - 1, buttonlist)));
 	});
-var _jkbits1$elm_work$WheelApp$buttonListToggle = F2(
+var _user$project$WheelApp$buttonListToggle = F2(
 	function (list, num) {
 		return A2(
 			_elm_lang$core$Basics_ops['++'],
 			A2(_elm_lang$core$List$take, num - 1, list),
 			A2(
 				_elm_lang$core$Basics_ops['++'],
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$core$Basics$not(
-						A2(_jkbits1$elm_work$WheelApp$buttonVal, list, num))
-					]),
+				{
+					ctor: '::',
+					_0: !A2(_user$project$WheelApp$buttonVal, list, num),
+					_1: {ctor: '[]'}
+				},
 				A2(
 					_elm_lang$core$List$take,
-					_jkbits1$elm_work$WheelApp$maxButton - num,
+					_user$project$WheelApp$maxButton - num,
 					A2(_elm_lang$core$List$drop, num, list))));
 	});
-var _jkbits1$elm_work$WheelApp$dataProcessedItems = _elm_lang$core$Native_Platform.incomingPort(
+var _user$project$WheelApp$input4 = function (inputs) {
+	return inputs.s4;
+};
+var _user$project$WheelApp$input3 = function (inputs) {
+	return inputs.s3;
+};
+var _user$project$WheelApp$input2 = function (inputs) {
+	return inputs.s2;
+};
+var _user$project$WheelApp$input1 = function (inputs) {
+	return inputs.s1;
+};
+var _user$project$WheelApp$modelInputs = function (_p6) {
+	var _p7 = _p6;
+	return _p7._1;
+};
+var _user$project$WheelApp$wheelData = F2(
+	function (model, inp) {
+		return _user$project$PuzzleModule$wheelPositionFromString(
+			inp(
+				_user$project$WheelApp$modelInputs(model)));
+	});
+var _user$project$WheelApp$dataProcessedItems = _elm_lang$core$Native_Platform.incomingPort(
 	'dataProcessedItems',
 	_elm_lang$core$Json_Decode$list(_elm_lang$core$Json_Decode$string));
-var _jkbits1$elm_work$WheelApp$showWheel = _elm_lang$core$Native_Platform.outgoingPort(
+var _user$project$WheelApp$showWheel = _elm_lang$core$Native_Platform.outgoingPort(
 	'showWheel',
 	function (v) {
 		return _elm_lang$core$Native_List.toArray(v).map(
@@ -9377,753 +9956,982 @@ var _jkbits1$elm_work$WheelApp$showWheel = _elm_lang$core$Native_Platform.outgoi
 					});
 			});
 	});
-var _jkbits1$elm_work$WheelApp$updateModel = F2(
-	function (update, _p13) {
-		var _p14 = _p13;
-		var _p33 = _p14._0;
-		var _p32 = _p14._1._4;
-		var _p31 = _p14._1._3;
-		var _p30 = _p14._1._2;
-		var _p29 = _p14._1._1;
-		var _p28 = _p14._1._0;
-		var _p27 = _p14._2;
-		var wd4 = _jkbits1$elm_work$WheelApp$d3DataFromString(_p32);
-		var wd3 = _jkbits1$elm_work$WheelApp$d3DataFromString(_p31);
-		var wd2 = _jkbits1$elm_work$WheelApp$d3DataFromString(_p30);
-		var wd1 = _jkbits1$elm_work$WheelApp$d3DataFromString(_p29);
+var _user$project$WheelApp$init = function () {
+	var model = _user$project$WheelApp$initialModelState;
+	var wd1 = _user$project$WheelApp$resultsToD3Data(
+		A2(_user$project$WheelApp$wheelData, model, _user$project$WheelApp$input1));
+	var wd2 = _user$project$WheelApp$resultsToD3Data(
+		A2(_user$project$WheelApp$wheelData, model, _user$project$WheelApp$input2));
+	var wd3 = _user$project$WheelApp$resultsToD3Data(
+		A2(_user$project$WheelApp$wheelData, model, _user$project$WheelApp$input3));
+	var wd4 = _user$project$WheelApp$resultsToD3Data(
+		A2(_user$project$WheelApp$wheelData, model, _user$project$WheelApp$input4));
+	return {
+		ctor: '_Tuple2',
+		_0: model,
+		_1: _user$project$WheelApp$showWheel(
+			{
+				ctor: '::',
+				_0: wd1,
+				_1: {
+					ctor: '::',
+					_0: wd2,
+					_1: {
+						ctor: '::',
+						_0: wd3,
+						_1: {
+							ctor: '::',
+							_0: wd4,
+							_1: {ctor: '[]'}
+						}
+					}
+				}
+			})
+	};
+}();
+var _user$project$WheelApp$ModelInputs = F5(
+	function (a, b, c, d, e) {
+		return {count: a, s1: b, s2: c, s3: d, s4: e};
+	});
+var _user$project$WheelApp$ModelResults = function (a) {
+	return function (b) {
+		return function (c) {
+			return function (d) {
+				return function (e) {
+					return function (f) {
+						return function (g) {
+							return function (h) {
+								return function (i) {
+									return function (j) {
+										return function (k) {
+											return {firstList: a, secLoop: b, thrLoop: c, ansLoop: d, twoListPerms: e, threeListPerms: f, ansPlusList: g, specificAnswer: h, ansPermsPlusList: i, specificAnswerPlusList: j, findAnswerLazy3: k};
+										};
+									};
+								};
+							};
+						};
+					};
+				};
+			};
+		};
+	};
+};
+var _user$project$WheelApp$Rotate3 = {ctor: 'Rotate3'};
+var _user$project$WheelApp$Rotate2 = {ctor: 'Rotate2'};
+var _user$project$WheelApp$Rotate1 = {ctor: 'Rotate1'};
+var _user$project$WheelApp$D3Response = function (a) {
+	return {ctor: 'D3Response', _0: a};
+};
+var _user$project$WheelApp$subscriptions = function (model) {
+	return _user$project$WheelApp$dataProcessedItems(_user$project$WheelApp$D3Response);
+};
+var _user$project$WheelApp$ChangeWheel = {ctor: 'ChangeWheel'};
+var _user$project$WheelApp$ShowState = {ctor: 'ShowState'};
+var _user$project$WheelApp$stateButton = function (hide) {
+	return A3(
+		_user$project$WheelApp$showButtonToggleText,
+		{ctor: '_Tuple2', _0: 'Show State', _1: 'Hide State'},
+		hide,
+		_user$project$WheelApp$ShowState);
+};
+var _user$project$WheelApp$ShowAns = {ctor: 'ShowAns'};
+var _user$project$WheelApp$answersButton = function (hide) {
+	return A3(
+		_user$project$WheelApp$showButtonToggleText,
+		{ctor: '_Tuple2', _0: 'Show Answers', _1: 'Hide Answers'},
+		hide,
+		_user$project$WheelApp$ShowAns);
+};
+var _user$project$WheelApp$ShowPerms3 = {ctor: 'ShowPerms3'};
+var _user$project$WheelApp$perms3Button = function (hide) {
+	return A3(
+		_user$project$WheelApp$showButtonToggleText,
+		{ctor: '_Tuple2', _0: 'Show Perms 3', _1: 'Hide Perms 3'},
+		hide,
+		_user$project$WheelApp$ShowPerms3);
+};
+var _user$project$WheelApp$ShowPerms2 = {ctor: 'ShowPerms2'};
+var _user$project$WheelApp$perms2Button = function (hide) {
+	return A3(
+		_user$project$WheelApp$showButtonToggleText,
+		{ctor: '_Tuple2', _0: 'Show Perms 2', _1: 'Hide Perms 2'},
+		hide,
+		_user$project$WheelApp$ShowPerms2);
+};
+var _user$project$WheelApp$ShowLoopAns = {ctor: 'ShowLoopAns'};
+var _user$project$WheelApp$ShowLoop3 = {ctor: 'ShowLoop3'};
+var _user$project$WheelApp$ShowLoop2 = {ctor: 'ShowLoop2'};
+var _user$project$WheelApp$Circle4Field = function (a) {
+	return {ctor: 'Circle4Field', _0: a};
+};
+var _user$project$WheelApp$Circle3Field = function (a) {
+	return {ctor: 'Circle3Field', _0: a};
+};
+var _user$project$WheelApp$Circle2Field = function (a) {
+	return {ctor: 'Circle2Field', _0: a};
+};
+var _user$project$WheelApp$Circle1Field = function (a) {
+	return {ctor: 'Circle1Field', _0: a};
+};
+var _user$project$WheelApp$Back = {ctor: 'Back'};
+var _user$project$WheelApp$backButton = A2(_user$project$WheelApp$uiButton, _user$project$WheelApp$Back, 'Step Back');
+var _user$project$WheelApp$view = function (_p8) {
+	var _p9 = _p8;
+	var _p13 = _p9._3;
+	var _p12 = _p9._1;
+	var buttonValue = _user$project$WheelApp$buttonVal(_p9._2);
+	var findAnswerLazy3 = _p13.findAnswerLazy3;
+	var specificAnswerPlusList = _p13.specificAnswerPlusList;
+	var ansPermsPlusList = _p13.ansPermsPlusList;
+	var specificAnswer = _p13.specificAnswer;
+	var ansPlusList = _p13.ansPlusList;
+	var threeListPerms = _p13.threeListPerms;
+	var twoListPerms = _p13.twoListPerms;
+	var ansLoop = _p13.ansLoop;
+	var thrLoop = _p13.thrLoop;
+	var secLoop = _p13.secLoop;
+	var firstList = _p13.firstList;
+	var fpa = A2(
+		_elm_lang$core$Maybe$withDefault,
+		{
+			ctor: '_Tuple2',
+			_0: {ctor: '[]'},
+			_1: {
+				ctor: '::',
+				_0: {ctor: '[]'},
+				_1: {ctor: '[]'}
+			}
+		},
+		_elm_lang$core$List$head(
+			A4(_user$project$PuzzleModule$findSpecificAnswer, firstList, secLoop, thrLoop, ansLoop)));
+	var ansTurn = function (n) {
+		return {
+			ctor: '_Tuple2',
+			_0: A2(
+				_user$project$PuzzleModule$turnWheel,
+				_elm_lang$core$Tuple$first(fpa),
+				n),
+			_1: A2(
+				_elm_lang$core$List$map,
+				A2(_elm_lang$core$Basics$flip, _user$project$PuzzleModule$turnWheel, n),
+				_elm_lang$core$Tuple$second(fpa))
+		};
+	};
+	var findScreenAns = F2(
+		function (ans, n) {
+			findScreenAns:
+			while (true) {
+				var ansT = _elm_lang$core$Tuple$first(
+					ansTurn(n));
+				var _p10 = _elm_lang$core$Native_Utils.eq(n, 0);
+				if (_p10 === true) {
+					return {
+						ctor: '_Tuple2',
+						_0: {ctor: '[]'},
+						_1: {ctor: '[]'}
+					};
+				} else {
+					var _p11 = _elm_lang$core$Native_Utils.eq(ansT, ans);
+					if (_p11 === true) {
+						return ansTurn(n);
+					} else {
+						var _v10 = ans,
+							_v11 = n - 1;
+						ans = _v10;
+						n = _v11;
+						continue findScreenAns;
+					}
+				}
+			}
+		});
+	var findScreenAnsX = function (ans) {
+		return A2(
+			findScreenAns,
+			ans,
+			_elm_lang$core$List$length(
+				_elm_lang$core$Tuple$first(fpa)));
+	};
+	var s4 = _p12.s4;
+	var s3 = _p12.s3;
+	var s2 = _p12.s2;
+	var s1 = _p12.s1;
+	var i = _p12.count;
+	return A2(
+		_elm_lang$html$Html$div,
+		{ctor: '[]'},
+		{
+			ctor: '::',
+			_0: A2(
+				_elm_lang$html$Html$div,
+				{
+					ctor: '::',
+					_0: _elm_lang$html$Html_Attributes$class('container'),
+					_1: {ctor: '[]'}
+				},
+				{
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('row title'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: A2(
+								_elm_lang$html$Html$h2,
+								{ctor: '[]'},
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html$text('Elm Puzzle Calculator'),
+									_1: {ctor: '[]'}
+								}),
+							_1: {ctor: '[]'}
+						}),
+					_1: {
+						ctor: '::',
+						_0: A2(
+							_elm_lang$html$Html$div,
+							{
+								ctor: '::',
+								_0: _elm_lang$html$Html_Attributes$class('row'),
+								_1: {ctor: '[]'}
+							},
+							{
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$div,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$class('btn-group'),
+										_1: {ctor: '[]'}
+									},
+									{
+										ctor: '::',
+										_0: _user$project$WheelApp$perms2Button(
+											buttonValue(5)),
+										_1: {
+											ctor: '::',
+											_0: _user$project$WheelApp$perms3Button(
+												buttonValue(6)),
+											_1: {
+												ctor: '::',
+												_0: _user$project$WheelApp$answersButton(
+													buttonValue(1)),
+												_1: {ctor: '[]'}
+											}
+										}
+									}),
+								_1: {
+									ctor: '::',
+									_0: A2(
+										_elm_lang$html$Html$div,
+										{
+											ctor: '::',
+											_0: _elm_lang$html$Html_Attributes$class('btn-group stateButton'),
+											_1: {ctor: '[]'}
+										},
+										{
+											ctor: '::',
+											_0: _user$project$WheelApp$backButton,
+											_1: {
+												ctor: '::',
+												_0: _user$project$WheelApp$stateButton(
+													buttonValue(7)),
+												_1: {ctor: '[]'}
+											}
+										}),
+									_1: {ctor: '[]'}
+								}
+							}),
+						_1: {
+							ctor: '::',
+							_0: A2(
+								_elm_lang$html$Html$br,
+								{ctor: '[]'},
+								{ctor: '[]'}),
+							_1: {
+								ctor: '::',
+								_0: A2(
+									_elm_lang$html$Html$form,
+									{
+										ctor: '::',
+										_0: _elm_lang$html$Html_Attributes$class('wheelsForm form-inline'),
+										_1: {ctor: '[]'}
+									},
+									{
+										ctor: '::',
+										_0: A2(
+											_elm_lang$html$Html$div,
+											{ctor: '[]'},
+											{
+												ctor: '::',
+												_0: A5(_user$project$WheelApp$formGroup, '1', 'wheel1input', s1, _user$project$WheelApp$Circle1Field, _user$project$WheelApp$Rotate1),
+												_1: {
+													ctor: '::',
+													_0: A5(_user$project$WheelApp$formGroup, '2', 'wheel2input', s2, _user$project$WheelApp$Circle2Field, _user$project$WheelApp$Rotate2),
+													_1: {ctor: '[]'}
+												}
+											}),
+										_1: {
+											ctor: '::',
+											_0: A2(
+												_elm_lang$html$Html$div,
+												{ctor: '[]'},
+												{
+													ctor: '::',
+													_0: A5(_user$project$WheelApp$formGroup, '3', 'wheel3input', s3, _user$project$WheelApp$Circle3Field, _user$project$WheelApp$Rotate3),
+													_1: {
+														ctor: '::',
+														_0: A5(_user$project$WheelApp$formGroup, 'Totals', 'wheelAnsInput', s4, _user$project$WheelApp$Circle4Field, _user$project$WheelApp$Rotate1),
+														_1: {ctor: '[]'}
+													}
+												}),
+											_1: {ctor: '[]'}
+										}
+									}),
+								_1: {
+									ctor: '::',
+									_0: A2(
+										_elm_lang$html$Html$div,
+										{
+											ctor: '::',
+											_0: _elm_lang$html$Html_Attributes$class('rotBtns'),
+											_1: {ctor: '[]'}
+										},
+										{
+											ctor: '::',
+											_0: A2(_user$project$WheelApp$rotButton, '1', _user$project$WheelApp$Rotate1),
+											_1: {
+												ctor: '::',
+												_0: A2(_user$project$WheelApp$rotButton, '2', _user$project$WheelApp$Rotate2),
+												_1: {
+													ctor: '::',
+													_0: A2(_user$project$WheelApp$rotButton, '3', _user$project$WheelApp$Rotate3),
+													_1: {ctor: '[]'}
+												}
+											}
+										}),
+									_1: {
+										ctor: '::',
+										_0: A2(
+											_elm_lang$html$Html$div,
+											{
+												ctor: '::',
+												_0: _elm_lang$html$Html_Attributes$id('chart'),
+												_1: {ctor: '[]'}
+											},
+											{ctor: '[]'}),
+										_1: {
+											ctor: '::',
+											_0: A2(
+												_elm_lang$html$Html$br,
+												{ctor: '[]'},
+												{ctor: '[]'}),
+											_1: {
+												ctor: '::',
+												_0: A2(
+													_elm_lang$html$Html$div,
+													{
+														ctor: '::',
+														_0: _elm_lang$html$Html_Attributes$class('wheelCalcs'),
+														_1: {ctor: '[]'}
+													},
+													{
+														ctor: '::',
+														_0: A3(_user$project$WheelApp$wheelOnlyRow, 1, 'Circle 1', s1),
+														_1: {
+															ctor: '::',
+															_0: A7(
+																_user$project$WheelApp$wheelRow,
+																2,
+																'Circle 2',
+																'Loop 2',
+																s2,
+																secLoop,
+																_user$project$WheelApp$ShowLoop2,
+																buttonValue(2)),
+															_1: {
+																ctor: '::',
+																_0: A7(
+																	_user$project$WheelApp$wheelRow,
+																	3,
+																	'Circle 3',
+																	'Loop 3',
+																	s3,
+																	thrLoop,
+																	_user$project$WheelApp$ShowLoop3,
+																	buttonValue(3)),
+																_1: {
+																	ctor: '::',
+																	_0: A7(
+																		_user$project$WheelApp$wheelRow,
+																		4,
+																		'Circle Totals',
+																		'Loop Totals',
+																		s4,
+																		ansLoop,
+																		_user$project$WheelApp$ShowLoopAns,
+																		buttonValue(4)),
+																	_1: {ctor: '[]'}
+																}
+															}
+														}
+													}),
+												_1: {ctor: '[]'}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}),
+			_1: {
+				ctor: '::',
+				_0: A2(
+					_elm_lang$html$Html$br,
+					{ctor: '[]'},
+					{ctor: '[]'}),
+				_1: {
+					ctor: '::',
+					_0: A2(
+						_elm_lang$html$Html$div,
+						{
+							ctor: '::',
+							_0: _elm_lang$html$Html_Attributes$class('answers'),
+							_1: {ctor: '[]'}
+						},
+						{
+							ctor: '::',
+							_0: A2(
+								_elm_lang$html$Html$div,
+								{
+									ctor: '::',
+									_0: _elm_lang$html$Html_Attributes$class('container'),
+									_1: {ctor: '[]'}
+								},
+								{
+									ctor: '::',
+									_0: _user$project$WheelApp$indicatorRow(
+										A2(_user$project$WheelApp$foundAnswerIndicator, specificAnswer, true)),
+									_1: {
+										ctor: '::',
+										_0: _user$project$WheelApp$indicatorRow(
+											A3(
+												_user$project$WheelApp$showAnswerIndicator,
+												specificAnswer,
+												buttonValue(1),
+												_elm_lang$core$Basics$toString(
+													findScreenAnsX(
+														_user$project$PuzzleModule$wheelPositionFromString(s4))))),
+										_1: {
+											ctor: '::',
+											_0: _user$project$WheelApp$indicatorRow(
+												A4(_user$project$WheelApp$puzzleSolvedIndicator, s1, s2, s3, s4)),
+											_1: {
+												ctor: '::',
+												_0: A2(
+													_elm_lang$html$Html$br,
+													{ctor: '[]'},
+													{ctor: '[]'}),
+												_1: {
+													ctor: '::',
+													_0: A3(
+														_user$project$WheelApp$infoRow,
+														'2 Loop Perms',
+														twoListPerms,
+														buttonValue(5)),
+													_1: {
+														ctor: '::',
+														_0: A3(
+															_user$project$WheelApp$infoRow,
+															'3 Loop Perms',
+															threeListPerms,
+															buttonValue(6)),
+														_1: {
+															ctor: '::',
+															_0: A3(
+																_user$project$WheelApp$infoRow,
+																'findAnswers2',
+																findScreenAnsX(
+																	_user$project$PuzzleModule$wheelPositionFromString(s4)),
+																buttonValue(1)),
+															_1: {
+																ctor: '::',
+																_0: A3(
+																	_user$project$WheelApp$infoRow,
+																	'findAnswers',
+																	specificAnswer,
+																	buttonValue(1)),
+																_1: {
+																	ctor: '::',
+																	_0: A2(
+																		_elm_lang$html$Html$br,
+																		{ctor: '[]'},
+																		{ctor: '[]'}),
+																	_1: {
+																		ctor: '::',
+																		_0: A3(
+																			_user$project$WheelApp$infoRow,
+																			'answersPlus',
+																			ansPlusList,
+																			buttonValue(1)),
+																		_1: {
+																			ctor: '::',
+																			_0: A3(
+																				_user$project$WheelApp$infoRow,
+																				'lazyAnswer - ',
+																				findAnswerLazy3,
+																				buttonValue(1)),
+																			_1: {
+																				ctor: '::',
+																				_0: A3(
+																					_user$project$WheelApp$infoRow,
+																					A2(
+																						_elm_lang$core$Basics_ops['++'],
+																						'State change count: ',
+																						_elm_lang$core$Basics$toString(i)),
+																					_p9._0,
+																					buttonValue(7)),
+																				_1: {ctor: '[]'}
+																			}
+																		}
+																	}
+																}
+															}
+														}
+													}
+												}
+											}
+										}
+									}
+								}),
+							_1: {ctor: '[]'}
+						}),
+					_1: {ctor: '[]'}
+				}
+			}
+		});
+};
+var _user$project$WheelApp$NoOp = {ctor: 'NoOp'};
+var _user$project$WheelApp$Static = {ctor: 'Static'};
+var _user$project$WheelApp$Backward = {ctor: 'Backward'};
+var _user$project$WheelApp$Forward = {ctor: 'Forward'};
+var _user$project$WheelApp$updateModel = F2(
+	function (update, _p14) {
+		var _p15 = _p14;
+		var _p25 = _p15._0;
+		var _p24 = _p15._2;
+		var wheelText = function (xs) {
+			return A2(
+				_elm_lang$core$String$join,
+				', ',
+				A2(
+					_elm_lang$core$List$map,
+					function (x) {
+						return _elm_lang$core$Basics$toString(x);
+					},
+					xs));
+		};
+		var rotateNumsString = function (s) {
+			return wheelText(
+				A2(
+					_user$project$PuzzleModule$turnWheel,
+					_user$project$PuzzleModule$wheelPositionFromString(s),
+					1));
+		};
+		var d3DataFromString = function (s) {
+			return _user$project$WheelApp$resultsToD3Data(
+				_user$project$PuzzleModule$wheelPositionFromString(s));
+		};
 		var tailHistory = A2(
 			_elm_lang$core$Maybe$withDefault,
-			_elm_lang$core$Native_List.fromArray(
-				[]),
-			_elm_lang$core$List$tail(_p33));
+			{ctor: '[]'},
+			_elm_lang$core$List$tail(_p25));
 		var createModel = F3(
-			function (_p15, buttonStates, forward) {
-				var _p16 = _p15;
-				var _p20 = _p16._4;
-				var _p19 = _p16._3;
-				var _p18 = _p16._2;
-				var _p17 = _p16._1;
-				var ansLoop = _jkbits1$elm_work$PuzzleModule$makeAnsLoop(_p20);
-				var thrLoop = _jkbits1$elm_work$PuzzleModule$makeThrLoop(_p19);
-				var secLoop = _jkbits1$elm_work$PuzzleModule$makeSecLoop(_p18);
-				var answers = _jkbits1$elm_work$PuzzleModule$wheelPositionFromString(_p20);
-				var first = _jkbits1$elm_work$PuzzleModule$wheelPositionFromString(_p17);
-				var newCalcs = {
-					ctor: '_Tuple7',
-					_0: first,
-					_1: secLoop,
-					_2: thrLoop,
-					_3: ansLoop,
-					_4: A2(_jkbits1$elm_work$PuzzleModule$twoWheelPerms, first, secLoop),
-					_5: A3(_jkbits1$elm_work$PuzzleModule$threeLoopPerms, first, secLoop, thrLoop),
-					_6: {
-						ctor: '_Tuple5',
-						_0: A3(_jkbits1$elm_work$PuzzleModule$answersPlusPerm, first, secLoop, thrLoop),
-						_1: A4(_jkbits1$elm_work$PuzzleModule$findSpecificAnswer, first, secLoop, thrLoop, ansLoop),
-						_2: A3(_jkbits1$elm_work$PuzzleModule$answersPermsPlusList, first, secLoop, thrLoop),
-						_3: A4(_jkbits1$elm_work$PuzzleModule$displaySpecificAnswers, first, secLoop, thrLoop, answers),
-						_4: A4(_jkbits1$elm_work$PuzzleModule$findAnswerCS, first, secLoop, thrLoop, ansLoop)
+			function (newInputs, newButtonStates, forward) {
+				var i = newInputs.count;
+				var currentHistory = function () {
+					var _p16 = forward;
+					switch (_p16.ctor) {
+						case 'Forward':
+							return {
+								ctor: '::',
+								_0: {ctor: '_Tuple2', _0: newInputs, _1: newButtonStates},
+								_1: _p25
+							};
+						case 'Static':
+							return _p25;
+						default:
+							return tailHistory;
 					}
+				}();
+				var currentInputs = function () {
+					var _p17 = forward;
+					switch (_p17.ctor) {
+						case 'Forward':
+							return newInputs;
+						case 'Static':
+							return newInputs;
+						default:
+							return _elm_lang$core$Tuple$first(
+								A2(
+									_elm_lang$core$Maybe$withDefault,
+									{ctor: '_Tuple2', _0: _user$project$WheelApp$initialInputs, _1: _user$project$WheelApp$initialStates},
+									_elm_lang$core$List$head(currentHistory)));
+					}
+				}();
+				var newS1 = currentInputs.s1;
+				var first = _user$project$PuzzleModule$wheelPositionFromString(newS1);
+				var newS2 = currentInputs.s2;
+				var secLoop = _user$project$PuzzleModule$makeSecLoop(newS2);
+				var newS3 = currentInputs.s3;
+				var thrLoop = _user$project$PuzzleModule$makeThrLoop(newS3);
+				var newS4 = currentInputs.s4;
+				var answers = _user$project$PuzzleModule$wheelPositionFromString(newS4);
+				var ansLoop = _user$project$PuzzleModule$makeAnsLoop(newS4);
+				var newCalcs = {
+					firstList: first,
+					secLoop: secLoop,
+					thrLoop: thrLoop,
+					ansLoop: ansLoop,
+					twoListPerms: A2(_user$project$PuzzleModule$twoWheelPerms, first, secLoop),
+					threeListPerms: A3(_user$project$PuzzleModule$threeLoopPerms, first, secLoop, thrLoop),
+					ansPlusList: A3(_user$project$PuzzleModule$answersPlusPerm, first, secLoop, thrLoop),
+					specificAnswer: A4(_user$project$PuzzleModule$findSpecificAnswer, first, secLoop, thrLoop, ansLoop),
+					ansPermsPlusList: A3(_user$project$PuzzleModule$answersPermsPlusList, first, secLoop, thrLoop),
+					specificAnswerPlusList: A4(_user$project$PuzzleModule$displaySpecificAnswers, first, secLoop, thrLoop, answers),
+					findAnswerLazy3: A4(_user$project$PuzzleModule$findAnswerCS, first, secLoop, thrLoop, ansLoop)
 				};
-				var inputs = {ctor: '_Tuple5', _0: _p16._0, _1: _p17, _2: _p18, _3: _p19, _4: _p20};
-				var newHistory = _elm_lang$core$Native_Utils.eq(forward, true) ? A2(
-					_elm_lang$core$List_ops['::'],
-					{ctor: '_Tuple2', _0: inputs, _1: buttonStates},
-					_p33) : tailHistory;
-				return {ctor: '_Tuple4', _0: newHistory, _1: inputs, _2: buttonStates, _3: newCalcs};
+				return {ctor: '_Tuple4', _0: currentHistory, _1: currentInputs, _2: newButtonStates, _3: newCalcs};
 			});
-		var mdl = A3(
-			createModel,
-			{ctor: '_Tuple5', _0: _p28, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-			_p27,
-			true);
-		var _p21 = A2(
+		var createModelCircle = F2(
+			function (inputs, wheelData) {
+				return {
+					ctor: '_Tuple2',
+					_0: A3(createModel, inputs, _p24, _user$project$WheelApp$Forward),
+					_1: _user$project$WheelApp$showWheel(wheelData)
+				};
+			});
+		var _p18 = A2(
 			_elm_lang$core$Maybe$withDefault,
-			{ctor: '_Tuple2', _0: _jkbits1$elm_work$WheelApp$initialInputs, _1: _jkbits1$elm_work$WheelApp$initialStates},
-			_elm_lang$core$List$head(_p33));
-		var inputs = _p21._0;
-		var states = _p21._1;
-		var newCount = _p28 + 1;
-		var _p22 = update;
-		switch (_p22.ctor) {
+			{ctor: '_Tuple2', _0: _user$project$WheelApp$initialInputs, _1: _user$project$WheelApp$initialStates},
+			_elm_lang$core$List$head(_p25));
+		var inputs = _p18._0;
+		var states = _p18._1;
+		var mdl = A3(createModel, inputs, _p24, _user$project$WheelApp$Forward);
+		var s4 = inputs.s4;
+		var wd4 = d3DataFromString(s4);
+		var s3 = inputs.s3;
+		var wd3 = d3DataFromString(s3);
+		var rotS3 = rotateNumsString(s3);
+		var s2 = inputs.s2;
+		var wd2 = d3DataFromString(s2);
+		var rotS2 = rotateNumsString(s2);
+		var s1 = inputs.s1;
+		var wd1 = d3DataFromString(s1);
+		var rotS1 = rotateNumsString(s1);
+		var i = inputs.count;
+		var newCount = i + 1;
+		var createModelShow = function (buttonNum) {
+			return A3(
+				createModel,
+				_elm_lang$core$Native_Utils.update(
+					inputs,
+					{count: newCount}),
+				A2(_user$project$WheelApp$buttonListToggle, _p24, buttonNum),
+				_user$project$WheelApp$Forward);
+		};
+		var _p19 = update;
+		switch (_p19.ctor) {
 			case 'NoOp':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: _p28, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						_p27,
-						true),
+					_0: A3(createModel, inputs, _p24, _user$project$WheelApp$Forward),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'Back':
+				var prevInputs = _elm_lang$core$Tuple$first(
+					A2(
+						_elm_lang$core$Maybe$withDefault,
+						{ctor: '_Tuple2', _0: _user$project$WheelApp$initialInputs, _1: _user$project$WheelApp$initialStates},
+						_elm_lang$core$List$head(tailHistory)));
 				return {
 					ctor: '_Tuple2',
-					_0: A3(createModel, inputs, states, false),
-					_1: _elm_lang$core$Platform_Cmd$none
+					_0: A3(createModel, inputs, states, _user$project$WheelApp$Backward),
+					_1: _user$project$WheelApp$showWheel(
+						{
+							ctor: '::',
+							_0: d3DataFromString(prevInputs.s1),
+							_1: {
+								ctor: '::',
+								_0: d3DataFromString(prevInputs.s2),
+								_1: {
+									ctor: '::',
+									_0: d3DataFromString(prevInputs.s3),
+									_1: {
+										ctor: '::',
+										_0: d3DataFromString(prevInputs.s4),
+										_1: {ctor: '[]'}
+									}
+								}
+							}
+						})
 				};
 			case 'Circle1Field':
-				var _p23 = _p22._0;
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p23, _2: _p30, _3: _p31, _4: _p32},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_jkbits1$elm_work$WheelApp$d3DataFromString(_p23),
-								wd2,
-								wd3,
-								wd4
-							]))
-				};
+				var _p20 = _p19._0;
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: newCount, s1: _p20}),
+					{
+						ctor: '::',
+						_0: d3DataFromString(_p20),
+						_1: {
+							ctor: '::',
+							_0: wd2,
+							_1: {
+								ctor: '::',
+								_0: wd3,
+								_1: {
+									ctor: '::',
+									_0: wd4,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
 			case 'Circle2Field':
-				var _p24 = _p22._0;
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p24, _3: _p31, _4: _p32},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								wd1,
-								_jkbits1$elm_work$WheelApp$d3DataFromString(_p24),
-								wd3,
-								wd4
-							]))
-				};
+				var _p21 = _p19._0;
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: newCount, s2: _p21}),
+					{
+						ctor: '::',
+						_0: wd1,
+						_1: {
+							ctor: '::',
+							_0: d3DataFromString(_p21),
+							_1: {
+								ctor: '::',
+								_0: wd3,
+								_1: {
+									ctor: '::',
+									_0: wd4,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
 			case 'Circle3Field':
-				var _p25 = _p22._0;
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p25, _4: _p32},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								wd1,
-								wd2,
-								_jkbits1$elm_work$WheelApp$d3DataFromString(_p25),
-								wd4
-							]))
-				};
+				var _p22 = _p19._0;
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: newCount, s3: _p22}),
+					{
+						ctor: '::',
+						_0: wd1,
+						_1: {
+							ctor: '::',
+							_0: wd2,
+							_1: {
+								ctor: '::',
+								_0: d3DataFromString(_p22),
+								_1: {
+									ctor: '::',
+									_0: wd4,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
 			case 'Circle4Field':
-				var _p26 = _p22._0;
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p26},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								wd1,
-								wd2,
-								wd3,
-								_jkbits1$elm_work$WheelApp$d3DataFromString(_p26)
-							]))
-				};
+				var _p23 = _p19._0;
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: newCount, s4: _p23}),
+					{
+						ctor: '::',
+						_0: wd1,
+						_1: {
+							ctor: '::',
+							_0: wd2,
+							_1: {
+								ctor: '::',
+								_0: wd3,
+								_1: {
+									ctor: '::',
+									_0: d3DataFromString(_p23),
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
 			case 'ShowAns':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 1),
-						true),
+					_0: createModelShow(1),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ShowLoop2':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 2),
-						true),
+					_0: createModelShow(2),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ShowLoop3':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 3),
-						true),
+					_0: createModelShow(3),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ShowLoopAns':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 4),
-						true),
+					_0: createModelShow(4),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ShowPerms2':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 5),
-						true),
+					_0: createModelShow(5),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ShowPerms3':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 6),
-						true),
+					_0: createModelShow(6),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ShowState':
 				return {
 					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: newCount, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						A2(_jkbits1$elm_work$WheelApp$buttonListToggle, _p27, 7),
-						true),
+					_0: createModelShow(7),
 					_1: _elm_lang$core$Platform_Cmd$none
 				};
 			case 'ChangeWheel':
 				return {
 					ctor: '_Tuple2',
 					_0: mdl,
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[wd1, wd2, wd3, wd4]))
-				};
-			case 'D3Response':
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{ctor: '_Tuple5', _0: _p28, _1: _p29, _2: _p30, _3: _p31, _4: _p32},
-						_p27,
-						true),
-					_1: _elm_lang$core$Platform_Cmd$none
+					_1: _user$project$WheelApp$showWheel(
+						{
+							ctor: '::',
+							_0: wd1,
+							_1: {
+								ctor: '::',
+								_0: wd2,
+								_1: {
+									ctor: '::',
+									_0: wd3,
+									_1: {
+										ctor: '::',
+										_0: wd4,
+										_1: {ctor: '[]'}
+									}
+								}
+							}
+						})
 				};
 			case 'Rotate1':
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{
-							ctor: '_Tuple5',
-							_0: _p28,
-							_1: _jkbits1$elm_work$WheelApp$rotateNumsString(_p29),
-							_2: _p30,
-							_3: _p31,
-							_4: _p32
-						},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_jkbits1$elm_work$WheelApp$d3DataFromString(
-								_jkbits1$elm_work$WheelApp$rotateNumsString(_p29)),
-								wd2,
-								wd3,
-								wd4
-							]))
-				};
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: i, s1: rotS1}),
+					{
+						ctor: '::',
+						_0: d3DataFromString(rotS1),
+						_1: {
+							ctor: '::',
+							_0: wd2,
+							_1: {
+								ctor: '::',
+								_0: wd3,
+								_1: {
+									ctor: '::',
+									_0: wd4,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
 			case 'Rotate2':
-				return {
-					ctor: '_Tuple2',
-					_0: A3(
-						createModel,
-						{
-							ctor: '_Tuple5',
-							_0: _p28,
-							_1: _p29,
-							_2: _jkbits1$elm_work$WheelApp$rotateNumsString(_p30),
-							_3: _p31,
-							_4: _p32
-						},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								wd1,
-								_jkbits1$elm_work$WheelApp$d3DataFromString(
-								_jkbits1$elm_work$WheelApp$rotateNumsString(_p30)),
-								wd3,
-								wd4
-							]))
-				};
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: i, s2: rotS2}),
+					{
+						ctor: '::',
+						_0: wd1,
+						_1: {
+							ctor: '::',
+							_0: d3DataFromString(rotS2),
+							_1: {
+								ctor: '::',
+								_0: wd3,
+								_1: {
+									ctor: '::',
+									_0: wd4,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
+			case 'Rotate3':
+				return A2(
+					createModelCircle,
+					_elm_lang$core$Native_Utils.update(
+						inputs,
+						{count: i, s3: rotS3}),
+					{
+						ctor: '::',
+						_0: wd1,
+						_1: {
+							ctor: '::',
+							_0: wd2,
+							_1: {
+								ctor: '::',
+								_0: d3DataFromString(rotS3),
+								_1: {
+									ctor: '::',
+									_0: wd4,
+									_1: {ctor: '[]'}
+								}
+							}
+						}
+					});
 			default:
 				return {
 					ctor: '_Tuple2',
 					_0: A3(
 						createModel,
-						{
-							ctor: '_Tuple5',
-							_0: _p28,
-							_1: _p29,
-							_2: _p30,
-							_3: _jkbits1$elm_work$WheelApp$rotateNumsString(_p31),
-							_4: _p32
-						},
-						_p27,
-						true),
-					_1: _jkbits1$elm_work$WheelApp$showWheel(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								wd1,
-								wd2,
-								_jkbits1$elm_work$WheelApp$d3DataFromString(
-								_jkbits1$elm_work$WheelApp$rotateNumsString(_p31)),
-								wd4
-							]))
+						_elm_lang$core$Native_Utils.update(
+							inputs,
+							{count: i}),
+						_p24,
+						_user$project$WheelApp$Static),
+					_1: _elm_lang$core$Platform_Cmd$none
 				};
 		}
 	});
-var _jkbits1$elm_work$WheelApp$init = function () {
-	var mdl = _jkbits1$elm_work$WheelApp$initialModelState;
-	var wd1 = _jkbits1$elm_work$WheelApp$resultsToD3Data(
-		A2(_jkbits1$elm_work$WheelApp$wheelData, mdl, _jkbits1$elm_work$WheelApp$input1));
-	var wd2 = _jkbits1$elm_work$WheelApp$resultsToD3Data(
-		A2(_jkbits1$elm_work$WheelApp$wheelData, mdl, _jkbits1$elm_work$WheelApp$input2));
-	var wd3 = _jkbits1$elm_work$WheelApp$resultsToD3Data(
-		A2(_jkbits1$elm_work$WheelApp$wheelData, mdl, _jkbits1$elm_work$WheelApp$input3));
-	var wd4 = _jkbits1$elm_work$WheelApp$resultsToD3Data(
-		A2(_jkbits1$elm_work$WheelApp$wheelData, mdl, _jkbits1$elm_work$WheelApp$input4));
-	return {
-		ctor: '_Tuple2',
-		_0: mdl,
-		_1: _jkbits1$elm_work$WheelApp$showWheel(
-			_elm_lang$core$Native_List.fromArray(
-				[wd1, wd2, wd3, wd4]))
-	};
-}();
-var _jkbits1$elm_work$WheelApp$Rotate3 = {ctor: 'Rotate3'};
-var _jkbits1$elm_work$WheelApp$Rotate2 = {ctor: 'Rotate2'};
-var _jkbits1$elm_work$WheelApp$Rotate1 = {ctor: 'Rotate1'};
-var _jkbits1$elm_work$WheelApp$D3Response = function (a) {
-	return {ctor: 'D3Response', _0: a};
-};
-var _jkbits1$elm_work$WheelApp$subscriptions = function (model) {
-	return _jkbits1$elm_work$WheelApp$dataProcessedItems(_jkbits1$elm_work$WheelApp$D3Response);
-};
-var _jkbits1$elm_work$WheelApp$ChangeWheel = {ctor: 'ChangeWheel'};
-var _jkbits1$elm_work$WheelApp$ShowState = {ctor: 'ShowState'};
-var _jkbits1$elm_work$WheelApp$stateButton = function (hide) {
-	return A4(
-		_jkbits1$elm_work$WheelApp$showLoopButton2,
-		{ctor: '_Tuple2', _0: 'Show State', _1: 'Hide State'},
-		hide,
-		_jkbits1$elm_work$WheelApp$ShowState,
-		_jkbits1$elm_work$WheelApp$buttonClassList2);
-};
-var _jkbits1$elm_work$WheelApp$ShowAns = {ctor: 'ShowAns'};
-var _jkbits1$elm_work$WheelApp$answersButton = function (hide) {
-	return A4(
-		_jkbits1$elm_work$WheelApp$showLoopButton2,
-		{ctor: '_Tuple2', _0: 'Show Answers', _1: 'Hide Answers'},
-		hide,
-		_jkbits1$elm_work$WheelApp$ShowAns,
-		_jkbits1$elm_work$WheelApp$buttonClassList2);
-};
-var _jkbits1$elm_work$WheelApp$ShowPerms3 = {ctor: 'ShowPerms3'};
-var _jkbits1$elm_work$WheelApp$perms3Button = function (hide) {
-	return A4(
-		_jkbits1$elm_work$WheelApp$showLoopButton2,
-		{ctor: '_Tuple2', _0: 'Show Perms 3', _1: 'Hide Perms 3'},
-		hide,
-		_jkbits1$elm_work$WheelApp$ShowPerms3,
-		_jkbits1$elm_work$WheelApp$buttonClassList2);
-};
-var _jkbits1$elm_work$WheelApp$ShowPerms2 = {ctor: 'ShowPerms2'};
-var _jkbits1$elm_work$WheelApp$perms2Button = function (hide) {
-	return A4(
-		_jkbits1$elm_work$WheelApp$showLoopButton2,
-		{ctor: '_Tuple2', _0: 'Show Perms 2', _1: 'Hide Perms 2'},
-		hide,
-		_jkbits1$elm_work$WheelApp$ShowPerms2,
-		_jkbits1$elm_work$WheelApp$buttonClassList2);
-};
-var _jkbits1$elm_work$WheelApp$ShowLoopAns = {ctor: 'ShowLoopAns'};
-var _jkbits1$elm_work$WheelApp$ShowLoop3 = {ctor: 'ShowLoop3'};
-var _jkbits1$elm_work$WheelApp$ShowLoop2 = {ctor: 'ShowLoop2'};
-var _jkbits1$elm_work$WheelApp$Circle4Field = function (a) {
-	return {ctor: 'Circle4Field', _0: a};
-};
-var _jkbits1$elm_work$WheelApp$Circle3Field = function (a) {
-	return {ctor: 'Circle3Field', _0: a};
-};
-var _jkbits1$elm_work$WheelApp$Circle2Field = function (a) {
-	return {ctor: 'Circle2Field', _0: a};
-};
-var _jkbits1$elm_work$WheelApp$Circle1Field = function (a) {
-	return {ctor: 'Circle1Field', _0: a};
-};
-var _jkbits1$elm_work$WheelApp$Back = {ctor: 'Back'};
-var _jkbits1$elm_work$WheelApp$backButton = A2(_jkbits1$elm_work$WheelApp$uiButton, _jkbits1$elm_work$WheelApp$Back, 'Step Back');
-var _jkbits1$elm_work$WheelApp$view = function (_p34) {
-	var _p35 = _p34;
-	var _p41 = _p35._3._6._1;
-	var _p40 = _p35._1._4;
-	var _p39 = _p35._1._3;
-	var _p38 = _p35._1._2;
-	var _p37 = _p35._1._1;
-	var _p36 = _p35._2;
-	return A2(
-		_elm_lang$html$Html$div,
-		_elm_lang$core$Native_List.fromArray(
-			[]),
-		_elm_lang$core$Native_List.fromArray(
-			[
-				A2(
-				_elm_lang$html$Html$div,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$class('container')
-					]),
-				_elm_lang$core$Native_List.fromArray(
-					[
-						A2(
-						_elm_lang$html$Html$div,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$class('row title')
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								A2(
-								_elm_lang$html$Html$h2,
-								_elm_lang$core$Native_List.fromArray(
-									[]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html$text('Elm Puzzle Calculator')
-									]))
-							])),
-						A2(
-						_elm_lang$html$Html$div,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$class('row')
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html_Attributes$class('btn-group')
-									]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_jkbits1$elm_work$WheelApp$perms2Button(
-										A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 5)),
-										_jkbits1$elm_work$WheelApp$perms3Button(
-										A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 6)),
-										_jkbits1$elm_work$WheelApp$answersButton(
-										A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 1))
-									])),
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html_Attributes$classList(
-										_elm_lang$core$Native_List.fromArray(
-											[
-												{ctor: '_Tuple2', _0: 'btn-group', _1: true},
-												{ctor: '_Tuple2', _0: 'stateButton', _1: true}
-											]))
-									]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_jkbits1$elm_work$WheelApp$backButton,
-										_jkbits1$elm_work$WheelApp$stateButton(
-										A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 7))
-									]))
-							])),
-						A2(
-						_elm_lang$html$Html$br,
-						_elm_lang$core$Native_List.fromArray(
-							[]),
-						_elm_lang$core$Native_List.fromArray(
-							[])),
-						A2(
-						_elm_lang$html$Html$form,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$classList(
-								_elm_lang$core$Native_List.fromArray(
-									[
-										{ctor: '_Tuple2', _0: 'wheelsForm', _1: true},
-										{ctor: '_Tuple2', _0: 'form-inline', _1: true}
-									]))
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										A6(_jkbits1$elm_work$WheelApp$formGroup, '1', 'wheel1input', _p37, _jkbits1$elm_work$WheelApp$Circle1Field, _jkbits1$elm_work$WheelApp$myStyle, _jkbits1$elm_work$WheelApp$Rotate1),
-										A6(_jkbits1$elm_work$WheelApp$formGroup, '2', 'wheel2input', _p38, _jkbits1$elm_work$WheelApp$Circle2Field, _jkbits1$elm_work$WheelApp$myStyle, _jkbits1$elm_work$WheelApp$Rotate2)
-									])),
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										A6(_jkbits1$elm_work$WheelApp$formGroup, '3', 'wheel3input', _p39, _jkbits1$elm_work$WheelApp$Circle3Field, _jkbits1$elm_work$WheelApp$myStyle, _jkbits1$elm_work$WheelApp$Rotate3),
-										A6(_jkbits1$elm_work$WheelApp$formGroup, 'Ans', 'wheelAnsInput', _p40, _jkbits1$elm_work$WheelApp$Circle4Field, _jkbits1$elm_work$WheelApp$myStyle, _jkbits1$elm_work$WheelApp$Rotate1)
-									]))
-							])),
-						A2(
-						_elm_lang$html$Html$div,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$classList(
-								_elm_lang$core$Native_List.fromArray(
-									[
-										{ctor: '_Tuple2', _0: 'rotBtns', _1: true}
-									]))
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								A2(_jkbits1$elm_work$WheelApp$rotButton, '1', _jkbits1$elm_work$WheelApp$Rotate1),
-								A2(_jkbits1$elm_work$WheelApp$rotButton, '2', _jkbits1$elm_work$WheelApp$Rotate2),
-								A2(_jkbits1$elm_work$WheelApp$rotButton, '3', _jkbits1$elm_work$WheelApp$Rotate3)
-							])),
-						A2(
-						_elm_lang$html$Html$div,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$id('chart')
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[])),
-						A2(
-						_elm_lang$html$Html$br,
-						_elm_lang$core$Native_List.fromArray(
-							[]),
-						_elm_lang$core$Native_List.fromArray(
-							[])),
-						A2(
-						_elm_lang$html$Html$div,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$classList(
-								_elm_lang$core$Native_List.fromArray(
-									[
-										{ctor: '_Tuple2', _0: 'wheelCalcs', _1: true}
-									]))
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								A3(_jkbits1$elm_work$WheelApp$wheelOnlyRow, 1, 'Wheel 1', _p37),
-								A7(
-								_jkbits1$elm_work$WheelApp$wheelRow,
-								2,
-								'Wheel 2',
-								'Loop 2',
-								_p38,
-								_elm_lang$core$Basics$toString(_p35._3._1),
-								_jkbits1$elm_work$WheelApp$ShowLoop2,
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 2)),
-								A7(
-								_jkbits1$elm_work$WheelApp$wheelRow,
-								3,
-								'Wheel 3',
-								'Loop 3',
-								_p39,
-								_elm_lang$core$Basics$toString(_p35._3._2),
-								_jkbits1$elm_work$WheelApp$ShowLoop3,
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 3)),
-								A7(
-								_jkbits1$elm_work$WheelApp$wheelRow,
-								4,
-								'Wheel Answers',
-								'Loop Answers',
-								_p40,
-								_elm_lang$core$Basics$toString(_p35._3._3),
-								_jkbits1$elm_work$WheelApp$ShowLoopAns,
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 4))
-							]))
-					])),
-				A2(
-				_elm_lang$html$Html$br,
-				_elm_lang$core$Native_List.fromArray(
-					[]),
-				_elm_lang$core$Native_List.fromArray(
-					[])),
-				A2(
-				_elm_lang$html$Html$div,
-				_elm_lang$core$Native_List.fromArray(
-					[
-						_elm_lang$html$Html_Attributes$classList(
-						_elm_lang$core$Native_List.fromArray(
-							[
-								{ctor: '_Tuple2', _0: 'answers', _1: true}
-							]))
-					]),
-				_elm_lang$core$Native_List.fromArray(
-					[
-						A2(
-						_elm_lang$html$Html$div,
-						_elm_lang$core$Native_List.fromArray(
-							[
-								_elm_lang$html$Html_Attributes$class('container')
-							]),
-						_elm_lang$core$Native_List.fromArray(
-							[
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html_Attributes$class('row')
-									]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										A2(
-										_elm_lang$html$Html$div,
-										_elm_lang$core$Native_List.fromArray(
-											[]),
-										_elm_lang$core$Native_List.fromArray(
-											[
-												A2(_jkbits1$elm_work$WheelApp$foundAnswerIndicator, _p41, true)
-											]))
-									])),
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html_Attributes$class('row')
-									]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										A2(
-										_elm_lang$html$Html$div,
-										_elm_lang$core$Native_List.fromArray(
-											[]),
-										_elm_lang$core$Native_List.fromArray(
-											[
-												A4(_jkbits1$elm_work$WheelApp$puzzleSolvedIndicator, _p37, _p38, _p39, _p40)
-											]))
-									])),
-								A2(
-								_elm_lang$html$Html$br,
-								_elm_lang$core$Native_List.fromArray(
-									[]),
-								_elm_lang$core$Native_List.fromArray(
-									[])),
-								A3(
-								_jkbits1$elm_work$WheelApp$infoRow,
-								'2 Loop Perms',
-								_elm_lang$core$Basics$toString(_p35._3._4),
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 5)),
-								A3(
-								_jkbits1$elm_work$WheelApp$infoRow,
-								'3 Loop Perms',
-								_elm_lang$core$Basics$toString(_p35._3._5),
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 6)),
-								A3(
-								_jkbits1$elm_work$WheelApp$infoRow,
-								'answersPlus',
-								_elm_lang$core$Basics$toString(_p35._3._6._0),
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 1)),
-								A2(
-								_elm_lang$html$Html$br,
-								_elm_lang$core$Native_List.fromArray(
-									[]),
-								_elm_lang$core$Native_List.fromArray(
-									[])),
-								A3(
-								_jkbits1$elm_work$WheelApp$infoRow,
-								'findAnswers',
-								_elm_lang$core$Basics$toString(_p41),
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 1)),
-								A3(
-								_jkbits1$elm_work$WheelApp$infoRow,
-								'lazyAnswer - ',
-								_elm_lang$core$Basics$toString(_p35._3._6._4),
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 1)),
-								A3(
-								_jkbits1$elm_work$WheelApp$infoRow,
-								A2(
-									_elm_lang$core$Basics_ops['++'],
-									'State change count: ',
-									_elm_lang$core$Basics$toString(_p35._1._0)),
-								_elm_lang$core$Basics$toString(_p35._0),
-								A2(_jkbits1$elm_work$WheelApp$buttonVal, _p36, 7)),
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html_Attributes$style(
-										A2(
-											_elm_lang$core$Basics_ops['++'],
-											_jkbits1$elm_work$WheelApp$textStyle,
-											_jkbits1$elm_work$WheelApp$displayStyle(false)))
-									]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html$text(
-										A2(
-											_elm_lang$core$Basics_ops['++'],
-											'answersPerms - ',
-											_elm_lang$core$Basics$toString(_p35._3._6._2)))
-									])),
-								A2(
-								_elm_lang$html$Html$div,
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html_Attributes$style(
-										A2(
-											_elm_lang$core$Basics_ops['++'],
-											_jkbits1$elm_work$WheelApp$textStyle,
-											_jkbits1$elm_work$WheelApp$displayStyle(false)))
-									]),
-								_elm_lang$core$Native_List.fromArray(
-									[
-										_elm_lang$html$Html$text(
-										A2(
-											_elm_lang$core$Basics_ops['++'],
-											'displayAnswer - ',
-											_elm_lang$core$Basics$toString(_p35._3._6._3)))
-									]))
-							]))
-					]))
-			]));
-};
-var _jkbits1$elm_work$WheelApp$main = {
-	main: _elm_lang$html$Html_App$program(
-		{init: _jkbits1$elm_work$WheelApp$init, view: _jkbits1$elm_work$WheelApp$view, update: _jkbits1$elm_work$WheelApp$updateModel, subscriptions: _jkbits1$elm_work$WheelApp$subscriptions})
-};
-var _jkbits1$elm_work$WheelApp$NoOp = {ctor: 'NoOp'};
+var _user$project$WheelApp$main = _elm_lang$html$Html$program(
+	{init: _user$project$WheelApp$init, view: _user$project$WheelApp$view, update: _user$project$WheelApp$updateModel, subscriptions: _user$project$WheelApp$subscriptions})();
 
 var Elm = {};
 Elm['WheelApp'] = Elm['WheelApp'] || {};
-_elm_lang$core$Native_Platform.addPublicModule(Elm['WheelApp'], 'WheelApp', typeof _jkbits1$elm_work$WheelApp$main === 'undefined' ? null : _jkbits1$elm_work$WheelApp$main);
+if (typeof _user$project$WheelApp$main !== 'undefined') {
+    _user$project$WheelApp$main(Elm['WheelApp'], 'WheelApp', undefined);
+}
 
 if (typeof define === "function" && define['amd'])
 {

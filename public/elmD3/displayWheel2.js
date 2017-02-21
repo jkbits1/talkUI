@@ -1,6 +1,5 @@
-/**
- * Created by Jon on 24/06/16.
- */
+// NOTE: all code here is based heavily on this excellent article
+// http://www.visualcinnamon.com/2015/09/placing-text-on-arcs.html
 
 "use strict";
 
@@ -8,9 +7,6 @@
 // circles
 function circles() {
   return [
-    // {name: "c1", value: 1, dataItems: donutDataList[0]}
-    // , {name: "c2", value: 2, dataItems: donutDataList[1]}
-    // donutDataList[0], donutDataList[1]
       ["a", "b", "c"]
     , ["m", "n", "o"]
     , ["p", "q", "r"]
@@ -24,17 +20,16 @@ function showCircle (donutDataList) {
 
 //Create a color scale
   var colorScale = d3.scale.linear()
-    // .domain([1, 3.5, 6])
-    // .domain([1, 4.8, 6])
-    // .domain([0.2, 2.8, 6])
-    // .domain([0.03, 2.6, 6])
     .domain([0.03, 2.1, 6])
+    // .domain([0, 2, 6])
     .range([
-      // "#2c7bb6",
       "#3c7bb6",
-      // "#ffffbf",
       "#D8D865",
       "#d7191c"])
+    // .range([
+      // "#0000ff", // blue
+      // "#00ffff", // green
+      // "#ff0000"]) // red
     .interpolate(d3.interpolateHcl);
 
 //Create an arc function
@@ -45,22 +40,15 @@ function showCircle (donutDataList) {
       .outerRadius(function (d) {
         return d.data.sz * 0.1 * width * 0.75 / 2 + 30;
       })
-  // .cornerRadius(6)
     ;
 
   var screenWidth = window.innerWidth;
 
   var initWH = 400;
 
-  // this seems to work pretty well, a bit iffy for 2.0 upwards though
-  // var adjRatio = 0.7;
   var adjRatio = 1.0;
-  // var adjRatio = 1.7;
-  // var adjRatio = 2.2;
 
   var margin = {left: 20, top: 20, right: 20, bottom: 20},
-    // width = Math.min(screenWidth, 500) - margin.left - margin.right,
-    // height = Math.min(screenWidth, 500) - margin.top - margin.bottom;
 
   width = Math.min(screenWidth, 500 * adjRatio) - margin.left - margin.right,
   height = Math.min(screenWidth, 500 * adjRatio) - margin.top - margin.bottom;
@@ -73,31 +61,21 @@ function showCircle (donutDataList) {
   var transWidth  = 200; // ((width / 2 + margin.left) - 50)
   var transHeight = 175; // ((height / 2 + margin.top) - 50)
 
-  // var
   svg = d3.select("#chart").append("svg")
-    .attr("width", svgWidth )
-    .attr("height", svgHeight)
-    .append("g").attr("class", "wrapper")
-    .attr("transform",
-      "translate(" +
-       transWidth + "," +
-        transHeight + ")")
-    // .attr("transform", "translate(" + (width + margin.left) + "," + (height + margin.top) + ")")
-    //   .attr("transform", "translate(250,250)")
-    ;
+  .attr("width", svgWidth )
+  .attr("height", svgHeight)
+  .append("g").attr("class", "wrapper")
+  .attr("transform",
+    "translate(" +
+     transWidth + "," +
+      transHeight + ")")
+  ;
 
   svg = svg.selectAll("g")
-    .data(circles)
-    // .data(circles, d => {
-    //   return d.name;
-    // })
-    .enter().append("g")
-    .attr("class", "circles")
-    ;
-
-  // NOTE set MATRIX
-  // https://github.com/d3/d3-3.x-api-reference/blob/master/Selections.md
-
+  .data(circles)
+  .enter().append("g")
+  .attr("class", "circles")
+  ;
 
 //Turn the pie chart 90 degrees counter clockwise, so it starts at the left
   var pie = d3.layout.pie()
@@ -131,30 +109,37 @@ function showCircle (donutDataList) {
 
   function donuts ()
   {
-//Create the donut slices
+  //Create the donut slices
 
-  svg.selectAll(".donutArcSlices")
-    // .selectAll(".donutArcSlices")
+    var firstColStartAngle = 0;
+
+    svg.selectAll(".donutArcSlices")
     .data(getDataList)
     .enter().append("path")
     .attr("class", "donutArcSlices")
 
-    // animals, left aligned
-    // .attr("id", function(d,i) { return "donutArc"+i; })
-
-    // animals, centered, left aligned, flipped
     .attr("d", arc)
     .style("fill", (d, i) => {
-      if (i === 7) return "#CCCCCC"; //Other
-      else return colorScale(i);
-    })
-    // animals, left aligned
-    // ;
+      var color = undefined;
 
-    // animals, centered (section of this code below flips the lower text)
-    //
-    // note - can't convert this to fat arrow syntax,
-    // something inside function gets broken, maybe regex syntax issue?
+      if (i === 0) {
+          firstColStartAngle = d.startAngle;
+      }
+
+      if (d.data.sz === 2) {
+        color = "#ff7c1f";
+      }
+      else
+      if (i === 7) {
+        color = "#CCCCCC"; //Other
+      }
+      else {
+        color = colorScale(i);
+      }
+
+      return color;
+    })
+
     .each(function (d, i) {
 
       //A regular expression that captures all in between the start of a string (denoted by ^) and a capital letter L
@@ -171,7 +156,7 @@ function showCircle (donutDataList) {
       //The [1] gives back the expression between the () (thus not the L as well) which is exactly the arc statement
       var newArc;
       var firstArcArray = firstArcSection.exec(d3.select(this).attr("d"));
-      
+
       if (firstArcArray == null) {
         newArc = "";
       }
@@ -200,44 +185,43 @@ function showCircle (donutDataList) {
             var newStart = endLoc.exec(newArc)[1];
             var newEnd = startLoc.exec(newArc)[1];
             var middleSec = middleLoc.exec(newArc)[1];
-        
+
             newArc = "M" + newStart + "A" + middleSec + "0 0 0 " + newEnd;
         }
-      }//if
+      }
 
       //Create a new invisible arc that the text can flow along
       svg.append("path")
-        .attr("class", "hiddenDonutArcs")
-        .attr("id", "donutArc" + i)
-        .attr("d", newArc)
-        .style("fill", "none");
+      .attr("class", "hiddenDonutArcs")
+      .attr("id", "donutArc" + i)
+      .attr("d", newArc)
+      // .style("fill", "none");
+      .style("fill", () => {
+        var color = "none";
+        // var color = "#FFFFFF";
 
+        // if (i === 0) {
+        //   color = "#CCCCCC"; //Other
+        // }
+
+        return color;
+      });
     });
+
+
+
 
     // text, left aligned, centered, flipped (see specific sections below)
     //Append the label names on the outside
     svg.selectAll(".donutText")
-    // left aligned and centered
-    //   .data(donutData)
-
-    // flipped
     .data( getDataList )
-
-    // left aligned, centered, flipped
     .enter().append("text")
     .attr("class", "donutText")
-
-    // left aligned and centered
-    // .attr("dy", -13)
-
-    // flipped
     //Move the labels below the arcs for those slices with an end angle greater than 90 degrees
     .attr("dy", (d, i) => {
       var dy = (d.endAngle > 90 * Math.PI / 180 ? 18 : -11);
 
       var adjDy = dy;
-      // var sz2adj = 37;
-      // var sz2adj2 = 9.6;
       var sz4adj = 28;
       var sz2adj = 38.5;
       var sz2adj2 = 6.8;
@@ -276,22 +260,21 @@ function showCircle (donutDataList) {
       return adjDy;
     })
 
-    // left aligned, centered, flipped
     .append("textPath")
-    // animals, left aligned
-    // .attr("xlink:href",function(d,i){return "#donutArc"+i;})
-    // .text( d => d.name );
-
-    // animals, centered, flipped
     .attr("startOffset", "50%")
     .style("text-anchor", "middle")
     .attr("xlink:href", (d, i) => "#donutArc" + i)
+    .text(d => {
+      var value = d.data.name;
 
-    // animals, centered
-    // .text(d => d.name);
-
-    // animals, flipped
-    .text(d => d.data.name);
-
-}
+      if (
+          // d.data.sz === 8 
+          d.data.sz > 2 
+            && d.startAngle === firstColStartAngle) {
+        value += "*";
+      } 
+      
+      return value;
+    });
+  }
 }

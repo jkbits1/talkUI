@@ -467,7 +467,7 @@ button {
   font-size: 18px;
 }
 
-.loopButton {
+.textButton {
   width: 125px;
 }
 
@@ -478,7 +478,8 @@ button {
   /*left: 583px;*/
   left: 511px;
   /*top: 535px;*/
-  top: 525px;
+  /*top: 525px;*/
+  top: 559px;
   font-size: 20px;
 }
 
@@ -488,7 +489,19 @@ button {
   position: absolute;
   /*left: 583px;*/
   left: 557px;
-  top: 559px;
+  /*top: 559px;*/
+  top: 525px;
+  font-size: 20px;
+}
+
+.showAnswer {
+  display: block;
+  font-weight: 700;
+  position: absolute;
+  /*left: 583px;*/
+  left: 511px;
+  /*top: 535px;*/
+  top: 595px;
   font-size: 20px;
 }
 
