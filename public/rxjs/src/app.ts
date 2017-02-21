@@ -3,30 +3,25 @@
  */
 
 import {Component, FORM_DIRECTIVES, CORE_DIRECTIVES, Observable, EventEmitter} from 'angular2/angular2';
+//import {Http, URLSearchParams} from 'angular2/http';
+//import {JSONP_PROVIDERS, Jsonp} from 'angular2/http';
+//import { Calcs1 } from './wheelCalcs';
 import { WheelCalcs } from './wheelCalcs';
 
-import { Subject, BehaviorSubject }    from 'rxjs5';
-
 enum WheelNums { First, Second, Third, Answers };
-enum LoopNums { First, Second, Third, Answers };
 
 @Component({
     selector: 'my-app',
+    //providers: [JSONP_PROVIDERS],
     template: `
 <br>
 <div class="container">
   <div class="row">
-    <h2>RxJs Calculations</h2>
-  </div>
-  <div class="row">
-    <h5>Change the values to see the algorithm automatically recalcuate</h5>
-  </div>
-  <br>
-  <div class="row">
-    <input #wheel1 type="text" (keyup)="passOnEvent(wheel1subject, $event)" value="1,2,3">
-    <input #wheel2 type="text" (keyup)="passOnEvent(wheel2subject, $event)" value="4,5,6">
-    <input #wheel3 type="text" (keyup)="passOnEvent(wheel3subject, $event)" value="7,8,9">
-    <input #wheel4 type="text" (keyup)="passOnEvent(wheel4subject, $event)" value="12,15,18">
+    <input #wheel1 type="text" (keyup)="keyup1($event)" value="1,2,3">
+    <input #wheel2 type="text" (keyup)="keyup2($event)" value="4,5,6">
+    <input #wheel3 type="text" (keyup)="keyup3($event)" value="7,8,9">
+    <input #wheel4 type="text" (keyup)="keyup4($event)" value="12,15,18">
+    <button (click)="testclick($event)">test</button>
   </div>
 
   <br>
@@ -50,7 +45,7 @@ enum LoopNums { First, Second, Third, Answers };
       Loop 2
     </div>
     <div class="col-sm-2">
-      {{loops[1].toString()}}
+      {{secLoop}}
     </div>
   </div>
   <br>
@@ -65,7 +60,7 @@ enum LoopNums { First, Second, Third, Answers };
       Loop 3
     </div>
     <div class="col-sm-2">
-      {{loops[2].toString()}}
+      {{thrLoop}}
     </div>
   </div>
   <br>
@@ -80,7 +75,7 @@ enum LoopNums { First, Second, Third, Answers };
       Loop ans
     </div>
     <div class="col-sm-2">
-      {{loops[3].toString()}}
+      {{ansLoop}}
     </div>
   </div>
 
@@ -119,15 +114,10 @@ enum LoopNums { First, Second, Third, Answers };
 directives: [CORE_DIRECTIVES, FORM_DIRECTIVES]
 })
 export class App {
-  private wheel1subject = new BehaviorSubject<string>("1,2,3");
-  private wheel2subject = new BehaviorSubject<string>("4,5,6");
-  private wheel3subject = new BehaviorSubject<string>("7,8,9");
-  private wheel4subject = new BehaviorSubject<string>("12, 15, 18");
-
-  private wheel1observable : Observable; 
-  private wheel2observable : Observable; 
-  private wheel3observable : Observable; 
-  private wheel4observable : Observable;
+  wheel1input = new EventEmitter();
+  wheel2input = new EventEmitter();
+  wheel3input = new EventEmitter();
+  wheel4input = new EventEmitter();
 
   id: number = 0;
   results1 = [];
@@ -135,9 +125,7 @@ export class App {
   results3 = [];
   results4 = [];
 
-  wheels: Array<WheelCalcs.WheelPos> = [[], [], [], []];
-
-  loops: Array<WheelCalcs.WheelLoop> = [[], [], [], []];
+  wheels: Array<WheelCalcs.WheelPos> = [[],[], [], []];
 
   secLoop: WheelCalcs.WheelLoop = [];
   thrLoop: WheelCalcs.WheelLoop = [];
@@ -150,6 +138,7 @@ export class App {
 
   answer: Any = undefined;
 
+  //constructor(http:Http, jsonp:Jsonp) {
   constructor() {
     this.id = 0;
 
@@ -158,81 +147,42 @@ export class App {
     this.results3 = [3];
     this.results4 = [4];
 
-    this.wheel1observable = this.wheel1subject.asObservable();
-    this.wheel2observable = this.wheel2subject.asObservable();
-    this.wheel3observable = this.wheel3subject.asObservable();
-    this.wheel4observable = this.wheel4subject.asObservable();  
+    this.handleWheelInputs(this.wheel1input._subject, this.results1, WheelNums.First);
+    this.handleWheelInputs(this.wheel2input._subject, this.results2, WheelNums.Second);
+    this.handleWheelInputs(this.wheel3input._subject, this.results3, WheelNums.Third);
+    this.handleWheelInputs(this.wheel4input._subject, this.results4, WheelNums.Answers);
 
     this.calcs = new WheelCalcs.Calcs1();
-
-    this.handleWheelInputs(this.wheel1observable, this.results1, WheelNums.First);
-
-    var wheelNums2 = this.handleWheelInputs(this.wheel2observable, this.results2, WheelNums.Second);
-    var wheelNums3 = this.handleWheelInputs(this.wheel3observable, this.results3, WheelNums.Third);
-    var wheelNumsAns = this.handleWheelInputs(this.wheel4observable, this.results4, WheelNums.Answers);
-
-    this.numsInputSubscribe(wheelNums2.wheelNums, LoopNums.Second);
-    this.numsInputSubscribe(wheelNums3.wheelNums, LoopNums.Third);
-    this.numsInputSubscribe(wheelNumsAns.wheelNums, LoopNums.Answers);
 
     this.wheels[WheelNums.First]    = [1, 2, 3];
     this.wheels[WheelNums.Second]   = [4, 5, 6];
     this.wheels[WheelNums.Third]    = [7, 8, 9];
     this.wheels[WheelNums.Answers]  = [12, 15, 18];
+
+    //var turn1:WheelCalcs.WheelPos =
+    //  this.calcs.turnWheel(this.wheels[1], 1);
   }
 
-  numsInputSubscribe (numsInput, loopNum) {
-    numsInput.subscribe(
-      wheelNums => this.loops[loopNum] = this.calcs.createWheelLoop(wheelNums) 
-    );
+  handleWheelInputs (subject, results, wheelPos) {
+    subject
+      .debounceTime(50)
+      .distinctUntilChanged()
+      //.switchMap(term => {
+      //})
+      .subscribe(
+        // this returns a fn that handles input
+        this.updateModel(this, results, wheelPos),
+        error => {
+          console.error('Error');
+        },
+        () => {
+          console.log('Completed!');
+        }
+      );
   }
 
-  handleWheelInputs (input, results, wheelPos) {
-    var distinctInput, wheelNums;
-    
-    distinctInput =
-      input
-        .debounceTime(50)
-        .distinctUntilChanged();
-
-    wheelNums =
-      distinctInput.map(this.numsFromInput);
-
-    wheelNums
-    .subscribe(
-      nums => this.wheels[wheelPos] = nums,
-      error,
-      completed
-    );
-
-    distinctInput
-    .subscribe(
-      this.updateModel(this, results, wheelPos),
-      error,
-      completed
-    );
-
-    function error () {
-      console.error('Error');
-    }
-
-    function completed () {
-      console.log('Completed!');
-    }
-
-    return {
-      wheelNums : wheelNums
-    };
-  }
-
-  numsFromInput (inputData) {
-    var sNums = inputData.split(",");
-
-    var nums = sNums.map(val => +(val) );
-
-    return nums;
-  }
-
+  // NOTE: this may be an abstraction too far, but keen to show this fn name
+  //       Especially, the self seems too fiddly
   updateModel (self, results, wheelPos) {
 
     function processInput (term) {
@@ -241,21 +191,28 @@ export class App {
         id: this.id++,
         val: term
       });
+
+      var sNums = term.split(",");
+
+      var nums = sNums.map(val => +(val) );
+
+      self.wheels[wheelPos] = nums;
     }
 
+    // need a better name
     function manageModel (term) {
       processInput(term);
 
-      // self.updateCalculations();
+      self.updateCalculations();
     }
 
     return manageModel;
   }
 
   updateCalculations () {
-    // this.secLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Second]);
-    // this.thrLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Third]);
-    // this.ansLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Answers]);
+    this.secLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Second]);
+    this.thrLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Third]);
+    this.ansLoop = this.calcs.createWheelLoop(this.wheels[WheelNums.Answers]);
 
     this.perms2 = this.calcs.twoWheelPerms(this.wheels[WheelNums.First], this.secLoop);
     this.perms3 = this.calcs.threeLoopPerms(this.wheels[WheelNums.First],
@@ -263,15 +220,41 @@ export class App {
 
     var c = this.calcs.columnsFromPermutation(this.perms3[0]);
 
+    // fn moved inside answersPlusPerms
+    //var s = this.calcs.sumPlusPerm(this.perms3[0]);
+
     var a:Array<[WheelCalcs.LoopsPermAnswers, WheelCalcs.LoopsPermutation]> =
       this.calcs.answersPlusPerm(this.wheels[WheelNums.First], this.secLoop, this.thrLoop);
 
     var f = this.calcs.findSpecificAnswer(this.wheels[WheelNums.First], this.secLoop, this.thrLoop, this.ansLoop);
 
     this.answer = f;
+
+    var i = 2;
   }
 
-  passOnEvent (input: Subject, $event: any) {
+  passOnEvent (input: EventEmitter, $event: any) {
     input.next($event.currentTarget.value);
+  }
+
+
+  keyup1 ($event) {
+    this.passOnEvent(this.wheel1input, $event);
+  }
+
+  keyup2 ($event) {
+    this.passOnEvent(this.wheel2input, $event);
+  }
+
+  keyup3 ($event) {
+    this.passOnEvent(this.wheel3input, $event);
+  }
+
+  keyup4 ($event) {
+    this.passOnEvent(this.wheel4input, $event);
+  }
+
+  testclick ($event) {
+
   }
 }
